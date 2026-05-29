@@ -483,6 +483,10 @@
             <label for="pfof-input">TC / PFOF %</label>
             <input id="pfof-input" type="number" step="0.1" min="0" max="25" />
           </div>
+          <div class="field">
+            <label for="floor-input">Favored Payout Floor %</label>
+            <input id="floor-input" type="number" step="0.1" min="0" max="100" />
+          </div>
           <div class="field check">
             <label for="require-binance">
               <input id="require-binance" type="checkbox" />
@@ -560,6 +564,9 @@
       if (document.activeElement !== $("pfof-input")) {
         $("pfof-input").value = Number.isFinite(quote.pfofPct) ? Number(quote.pfofPct).toFixed(2) : "";
       }
+      if (document.activeElement !== $("floor-input")) {
+        $("floor-input").value = Number.isFinite(quote.favoredPayoutFloor) ? Number(quote.favoredPayoutFloor).toFixed(2) : "";
+      }
       $("require-binance").checked = quote.requireBinance !== false;
 
       const favored = quote.favoredSide || "Neutral";
@@ -618,12 +625,13 @@
     $("apply-settings").addEventListener("click", async () => {
       const edgePct = Number($("edge-input").value);
       const pfofPct = Number($("pfof-input").value);
+      const favoredPayoutFloor = Number($("floor-input").value);
       const requireBinance = $("require-binance").checked;
       $("settings-note").textContent = "Applying hosted runtime settings...";
       try {
-        const result = await postJson("/api/settings", { edgePct, pfofPct, requireBinance });
+        const result = await postJson("/api/settings", { edgePct, pfofPct, favoredPayoutFloor, requireBinance });
         if (!result.ok) throw new Error(result.error || "settings update failed");
-        $("settings-note").textContent = `Applied live settings: edge ${result.edgePct.toFixed(2)}%, tc ${result.pfofPct.toFixed(2)}%, binance only ${result.requireBinance ? "on" : "off"}.`;
+        $("settings-note").textContent = `Applied live settings: edge ${result.edgePct.toFixed(2)}%, tc ${result.pfofPct.toFixed(2)}%, floor ${result.favoredPayoutFloor.toFixed(2)}%, binance only ${result.requireBinance ? "on" : "off"}.`;
       } catch (error) {
         $("settings-note").textContent = `Settings update failed: ${String(error)}`;
       }
@@ -634,7 +642,7 @@
       try {
         const result = await postJson("/api/settings/reset");
         if (!result.ok) throw new Error(result.error || "settings reset failed");
-        $("settings-note").textContent = `Reset to defaults: edge ${result.edgePct.toFixed(2)}%, tc ${result.pfofPct.toFixed(2)}%, binance only ${result.requireBinance ? "on" : "off"}.`;
+        $("settings-note").textContent = `Reset to defaults: edge ${result.edgePct.toFixed(2)}%, tc ${result.pfofPct.toFixed(2)}%, floor ${result.favoredPayoutFloor.toFixed(2)}%, binance only ${result.requireBinance ? "on" : "off"}.`;
       } catch (error) {
         $("settings-note").textContent = `Reset failed: ${String(error)}`;
       }

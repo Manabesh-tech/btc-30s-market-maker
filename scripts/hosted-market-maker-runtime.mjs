@@ -72,6 +72,7 @@ const defaultSettings = {
   edgePct: 4.0,
   pfofPct: 2.5,
   requireBinance: true,
+  favoredPayoutFloor: 65.0,
 };
 
 const fittedMidModel = JSON.parse(
@@ -111,6 +112,7 @@ const state = {
     edgePct: defaultSettings.edgePct,
     pfofPct: defaultSettings.pfofPct,
     requireBinance: defaultSettings.requireBinance,
+    favoredPayoutFloor: defaultSettings.favoredPayoutFloor,
     active: false,
     disabledReason: "Waiting for Binance depth",
     rawProbability: 0.5,
@@ -172,6 +174,21 @@ function sigmoid(x) {
 function payoutForProbability(probability, edgePercent) {
   const grossMultiplier = 1 - edgePercent / 100;
   return 100 * grossMultiplier / probability - 100;
+}
+
+function probabilityForPayout(payout, edgePercent) {
+  const grossMultiplier = 1 - edgePercent / 100;
+  return (100 * grossMultiplier) / (100 + payout);
+}
+
+function clampProbabilityByFloor(probability, edgePercent, favoredPayoutFloor) {
+  if (!Number.isFinite(favoredPayoutFloor)) return probability;
+  const floor = Math.max(0, favoredPayoutFloor);
+  const floorProbCap = probabilityForPayout(floor, edgePercent);
+  if (!Number.isFinite(floorProbCap)) return probability;
+  const upper = Math.max(0.5, floorProbCap);
+  const lower = Math.min(0.5, 1 - floorProbCap);
+  return clamp(probability, lower, upper);
 }
 
 function impliedProbabilityFromPayout(payout) {
@@ -260,11 +277,14 @@ function applyRuntimeSettings(input = {}) {
   const nextEdge = clamp(Number(input.edgePct ?? state.quote.edgePct), 0, 25);
   const nextPfof = clamp(Number(input.pfofPct ?? state.quote.pfofPct), 0, 25);
   const nextRequireBinance = input.requireBinance ?? state.quote.requireBinance;
+  const nextFavoredPayoutFloor = clamp(Number(input.favoredPayoutFloor ?? state.quote.favoredPayoutFloor), 0, 100);
   state.quote.edgePct = Number.isFinite(nextEdge) ? nextEdge : state.quote.edgePct;
   state.quote.pfofPct = Number.isFinite(nextPfof) ? nextPfof : state.quote.pfofPct;
   state.quote.requireBinance = Boolean(nextRequireBinance);
+  state.quote.favoredPayoutFloor = Number.isFinite(nextFavoredPayoutFloor) ? nextFavoredPayoutFloor : state.quote.favoredPayoutFloor;
   if (state.quote.active && Number.isFinite(state.quote.displayProbability)) {
-    const p = state.quote.displayProbability;
+    const p = clampProbabilityByFloor(state.quote.displayProbability, state.quote.edgePct, state.quote.favoredPayoutFloor);
+    state.quote.displayProbability = p;
     state.quote.upPayout = payoutForProbability(p, state.quote.edgePct);
     state.quote.downPayout = payoutForProbability(1 - p, state.quote.edgePct);
   }
@@ -588,16 +608,18 @@ async function refreshQuoteWindow() {
       const alpha = clamp(dtSeconds / 6, fallbackCalibration.alphaMin, fallbackCalibration.alphaMax);
       const candidateProbability = prev + alpha * (targetProbability - prev);
       const maxStep = fallbackCalibration.maxStepPerSecond * dtSeconds;
-      const nextProbability = clamp(
+      let nextProbability = clamp(
         prev + clamp(candidateProbability - prev, -maxStep, maxStep),
         0.5 - (maxProb - 0.5),
         0.5 + (maxProb - 0.5),
       );
+      nextProbability = clampProbabilityByFloor(nextProbability, state.quote.edgePct, state.quote.favoredPayoutFloor);
       quoteWindowStartTs = windowStart;
       state.quote = {
         edgePct: state.quote.edgePct,
         pfofPct: state.quote.pfofPct,
         requireBinance: state.quote.requireBinance,
+        favoredPayoutFloor: state.quote.favoredPayoutFloor,
         active: true,
         disabledReason: null,
         rawProbability,
@@ -610,7 +632,7 @@ async function refreshQuoteWindow() {
         regime: summarizeRegime(rawProbability),
       };
       recordQuoteSnapshot();
-    } else {
+      } else {
       state.quote.rawProbability = rawProbability;
       state.quote.regime = summarizeRegime(rawProbability);
       state.quote.active = true;
@@ -695,6 +717,7 @@ const server = http.createServer((req, res) => {
           edgePct: state.quote.edgePct,
           pfofPct: state.quote.pfofPct,
           requireBinance: state.quote.requireBinance,
+          favoredPayoutFloor: state.quote.favoredPayoutFloor,
         });
       })
       .catch((error) => {
@@ -709,6 +732,7 @@ const server = http.createServer((req, res) => {
       edgePct: state.quote.edgePct,
       pfofPct: state.quote.pfofPct,
       requireBinance: state.quote.requireBinance,
+      favoredPayoutFloor: state.quote.favoredPayoutFloor,
     });
     return;
   }
