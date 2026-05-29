@@ -1,0 +1,2710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>30s Market Maker Console</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --panel: rgba(255, 251, 245, 0.92);
+      --ink: #17212b;
+      --muted: #5a6672;
+      --accent: #0e7c66;
+      --accent-2: #a53f2b;
+      --line: rgba(23, 33, 43, 0.12);
+      --good: #0f8a4f;
+      --warn: #a26911;
+      --bad: #b43737;
+      --card-shadow: 0 16px 40px rgba(23, 33, 43, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Aptos", system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(14, 124, 102, 0.12), transparent 32%),
+        radial-gradient(circle at bottom left, rgba(165, 63, 43, 0.12), transparent 28%),
+        linear-gradient(160deg, #f8f3ea 0%, #f1ece4 55%, #ece6de 100%);
+    }
+
+    .page {
+      width: min(1480px, calc(100vw - 32px));
+      margin: 20px auto 48px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .hero-card,
+    .panel,
+    .quote-card,
+    .tape-card,
+    .notes-card,
+    .formula-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--card-shadow);
+      backdrop-filter: none;
+    }
+
+    .hero-card {
+      padding: 28px 30px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-card::after {
+      content: "";
+      position: absolute;
+      inset: auto -80px -90px auto;
+      width: 240px;
+      height: 240px;
+      background: radial-gradient(circle, rgba(14, 124, 102, 0.16), transparent 68%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(14, 124, 102, 0.10);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 16px 0 10px;
+      font-size: clamp(30px, 3vw, 42px);
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+    }
+
+    .hero-copy {
+      max-width: 780px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .hero-grid {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .mini-stat {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(23, 33, 43, 0.08);
+    }
+
+    .mini-stat span {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .mini-stat strong {
+      font-size: 20px;
+      letter-spacing: -0.03em;
+    }
+
+    .formula-card {
+      padding: 22px 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .formula-card h2,
+    .panel h2,
+    .tape-card h2,
+    .notes-card h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .formula-block {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: #1e252b;
+      color: #f3f5f6;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+
+    .formula-foot {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 420px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      padding: 22px 22px 24px;
+    }
+
+    .panel + .panel {
+      margin-top: 18px;
+    }
+
+    .group-label {
+      margin: 20px 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .field-grid.single {
+      grid-template-columns: 1fr;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+
+    .field input,
+    .field select,
+    .field button {
+      appearance: none;
+      border: 1px solid rgba(23, 33, 43, 0.15);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.84);
+      padding: 10px 12px;
+      color: var(--ink);
+      font: inherit;
+    }
+
+    .field input[type="range"] {
+      padding: 0;
+      background: transparent;
+      border: 0;
+    }
+
+    .field button {
+      cursor: pointer;
+    }
+
+    .range-readout {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .toggle-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .mode-row {
+      display: flex;
+      gap: 10px;
+      margin: 0 0 16px;
+      flex-wrap: wrap;
+    }
+
+    .mode-button {
+      border: 1px solid rgba(23, 33, 43, 0.12);
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 9px 14px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .mode-button.active {
+      background: var(--ink);
+      color: white;
+      border-color: var(--ink);
+    }
+
+    .feed-status {
+      margin: 14px 0 4px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(23, 33, 43, 0.08);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .feed-status-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .feed-title {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .feed-badge {
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(90, 102, 114, 0.12);
+      color: var(--muted);
+    }
+
+    .feed-badge.live {
+      background: rgba(15, 138, 79, 0.14);
+      color: var(--good);
+    }
+
+    .feed-badge.manual {
+      background: rgba(162, 105, 17, 0.14);
+      color: var(--warn);
+    }
+
+    .feed-mini-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .feed-mini {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(23, 33, 43, 0.07);
+    }
+
+    .feed-mini span {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .feed-mini strong {
+      font-size: 16px;
+      letter-spacing: -0.03em;
+    }
+
+    .calibration-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(23, 33, 43, 0.08);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      flex-wrap: wrap;
+    }
+
+    .calibration-line strong {
+      color: var(--ink);
+    }
+
+    .pill-button,
+    .action-button {
+      border: 0;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+    }
+
+    .pill-button {
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: rgba(14, 124, 102, 0.10);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .pill-button:hover,
+    .action-button:hover {
+      transform: translateY(-1px);
+    }
+
+    .action-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .action-button {
+      flex: 1;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--ink);
+      color: white;
+      font-weight: 700;
+    }
+
+    .action-button.secondary {
+      background: rgba(23, 33, 43, 0.08);
+      color: var(--ink);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
+    }
+
+    .quote-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+    }
+
+    .quote-card {
+      padding: 22px 24px;
+      min-height: 320px;
+    }
+
+    .quote-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 18px;
+    }
+
+    .quote-head p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .state-chip {
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .state-chip.neutral {
+      background: rgba(90, 102, 114, 0.12);
+      color: var(--muted);
+    }
+
+    .state-chip.up {
+      background: rgba(15, 138, 79, 0.14);
+      color: var(--good);
+    }
+
+    .state-chip.down {
+      background: rgba(180, 55, 55, 0.14);
+      color: var(--bad);
+    }
+
+    .big-quotes {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .quote-box {
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(23, 33, 43, 0.08);
+      background: rgba(255, 255, 255, 0.76);
+      min-height: 132px;
+    }
+
+    .quote-box .side {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .quote-box .payout {
+      font-size: clamp(22px, 2.4vw, 32px);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+      font-weight: 800;
+      margin: 10px 0 4px;
+      min-height: 32px;
+    }
+
+    .quote-box .meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .stream-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: end;
+      margin-top: 14px;
+    }
+
+    .stream-bar .field {
+      flex: 1 1 220px;
+    }
+
+    .stream-preview {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: #1e252b;
+      color: #f3f5f6;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      max-height: 220px;
+      overflow: auto;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(23, 33, 43, 0.08);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 18px;
+      letter-spacing: -0.04em;
+      margin-bottom: 6px;
+      min-height: 22px;
+    }
+
+    .metric small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .panel-table,
+    .tape-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .panel-table th,
+    .panel-table td,
+    .tape-table th,
+    .tape-table td {
+      padding: 10px 8px;
+      border-bottom: 1px solid rgba(23, 33, 43, 0.08);
+      text-align: left;
+      font-size: 13px;
+    }
+
+    .panel-table th,
+    .tape-table th {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    .contribution {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .bar {
+      position: relative;
+      flex: 1;
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(23, 33, 43, 0.08);
+      overflow: hidden;
+    }
+
+    .bar > span {
+      position: absolute;
+      inset: 0 auto 0 50%;
+      width: 0;
+      transform-origin: left center;
+    }
+
+    .bar > span.pos {
+      background: linear-gradient(90deg, rgba(15, 138, 79, 0.45), rgba(15, 138, 79, 0.95));
+    }
+
+    .bar > span.neg {
+      transform-origin: right center;
+      left: auto;
+      right: 50%;
+      background: linear-gradient(90deg, rgba(180, 55, 55, 0.95), rgba(180, 55, 55, 0.45));
+    }
+
+    .tape-card,
+    .notes-card {
+      padding: 22px 24px;
+    }
+
+    .notes-card ul {
+      margin: 12px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .notes-card li + li {
+      margin-top: 8px;
+    }
+
+    .subtle {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 1180px) {
+      .layout,
+      .hero,
+      .quote-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        width: min(100vw - 18px, 1480px);
+        margin: 10px auto 30px;
+      }
+
+      .hero-card,
+      .formula-card,
+      .panel,
+      .quote-card,
+      .tape-card,
+      .notes-card {
+        border-radius: 18px;
+      }
+
+      .hero-grid,
+      .field-grid,
+      .metric-grid,
+      .big-quotes,
+      .feed-mini-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .action-row {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <div class="hero-card">
+        <div class="eyebrow">30s Live Quoting Console</div>
+        <h1>Market-indicator-driven binary pricing for every new 30s bucket.</h1>
+        <p class="hero-copy">
+          This prototype prices each side from a live fair probability, not from user flow. It is built for
+          streaming microstructure signals every second, shrinking them toward neutral when confidence is low,
+          and then applying a constant-edge payout model on top.
+        </p>
+        <div class="hero-grid">
+          <div class="mini-stat">
+            <span>Target Gross Edge</span>
+            <strong id="hero-edge">4.00%</strong>
+          </div>
+          <div class="mini-stat">
+            <span>Backtest Winner</span>
+            <strong id="hero-backtest">Top 5 / 0.50 / 3.0s</strong>
+          </div>
+          <div class="mini-stat">
+            <span>PFOF Drag</span>
+            <strong id="hero-pfof">2.50%</strong>
+          </div>
+          <div class="mini-stat">
+            <span>Triggered P(up)</span>
+            <strong id="hero-triggered-p">59.24%</strong>
+          </div>
+          <div class="mini-stat">
+            <span>Neutral Quote</span>
+            <strong id="hero-neutral">92 / 92</strong>
+          </div>
+          <div class="mini-stat">
+            <span>Expected Net Keep</span>
+            <strong id="hero-net">1.50%</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="formula-card">
+        <div>
+          <h2>Core Pricing Formula</h2>
+          <div class="formula-block" id="formula-text">gross_multiplier = 1 - edge
+favored_payout = 100 * gross_multiplier / p - 100
+other_payout   = 100 * gross_multiplier / (1 - p) - 100
+
+neutral(p = 0.50, edge = 4%) -> 92 / 92</div>
+        </div>
+        <div class="formula-foot">
+          Keep the model market-indicator-driven. Flow and inventory overlays are left out on purpose here.
+          If we later decide they matter for diagnostics, we can study them without using them in the live quote.
+        </div>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div>
+        <div class="panel">
+          <h2>Quote Engine</h2>
+          <div class="mode-row">
+            <button id="basic-mode-btn" class="mode-button active">Basic Mode</button>
+            <button id="advanced-mode-btn" class="mode-button">Advanced Mode</button>
+            <button id="calibrate-btn" class="mode-button">Calibrate</button>
+          </div>
+          <div class="field-grid">
+            <div class="field">
+              <label for="edge">Gross edge (%)</label>
+              <input id="edge" type="number" min="0" max="20" step="0.1" value="4.0" />
+            </div>
+            <div class="field">
+              <label for="pfof">PFOF / cost drag (%)</label>
+              <input id="pfof" type="number" min="0" max="20" step="0.1" value="2.5" />
+            </div>
+            <div class="field">
+              <label for="cadence">Quote cadence (seconds)</label>
+              <input id="cadence" type="number" min="2" max="10" step="1" value="2" />
+            </div>
+            <div class="field">
+              <label for="maxProb">Max favored P (%)</label>
+              <input id="maxProb" type="number" min="50" max="80" step="0.1" value="65.0" />
+            </div>
+            <div class="field">
+              <label for="imbalanceThreshold">Backtest gate: imbalance threshold</label>
+              <input id="imbalanceThreshold" type="number" min="0" max="1" step="0.01" value="0.50" />
+            </div>
+            <div class="field">
+              <label for="persistGate">Backtest gate: persistence (s)</label>
+              <input id="persistGate" type="number" min="0" max="10" step="0.1" value="3.0" />
+            </div>
+            <div class="field">
+              <label for="calibrationWindow">Calibrate lookback</label>
+              <select id="calibrationWindow">
+                <option value="last7">Last 7d</option>
+                <option value="today">Today</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="calibrationMetric">Optimize for</label>
+              <select id="calibrationMetric">
+                <option value="30">30s product</option>
+                <option value="1m">1m product</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="feed-status">
+            <div class="feed-status-head">
+              <div class="feed-title">Live Market Feed</div>
+              <div id="feed-badge" class="feed-badge manual">Manual</div>
+            </div>
+            <div class="feed-mini-grid">
+              <div class="feed-mini">
+                <span>Source</span>
+                <strong id="feed-source">Binance Futures BTCUSDT</strong>
+              </div>
+              <div class="feed-mini">
+                <span>Mid</span>
+                <strong id="feed-mid">-</strong>
+              </div>
+              <div class="feed-mini">
+                <span>Spread</span>
+                <strong id="feed-spread">-</strong>
+              </div>
+              <div class="feed-mini">
+                <span>Updated</span>
+                <strong id="feed-updated">-</strong>
+              </div>
+            </div>
+            <div class="calibration-line">
+              <div><span>Calibration</span> <strong id="calibration-state">Embedded last 7d winner</strong></div>
+              <div id="calibration-pnl">30s uplift +31.6k over last 7d</div>
+            </div>
+            <div class="calibration-line">
+              <div><span>Last run</span> <strong id="calibration-time">Not run yet</strong></div>
+              <div id="calibration-detail">Press Calibrate to stamp the chosen winner into the live gate.</div>
+            </div>
+          </div>
+
+          <div class="feed-status">
+            <div class="feed-status-head">
+              <div class="feed-title">Platform Odds Stream</div>
+              <div id="platform-stream-badge" class="feed-badge manual">Disconnected</div>
+            </div>
+            <div class="stream-bar">
+              <div class="field">
+                <label for="platformHost">Prod API host</label>
+                <input id="platformHost" type="text" placeholder="api.example.com" />
+              </div>
+              <div class="field">
+                <label for="platformPath">Websocket path</label>
+                <input id="platformPath" type="text" value="/ws/vendor/predict-quotes" />
+              </div>
+              <div class="field">
+                <label>&nbsp;</label>
+                <button id="platform-stream-toggle" class="action-button secondary" type="button">Connect Stream</button>
+              </div>
+            </div>
+            <div class="calibration-line">
+              <div><span>Last stream quote</span> <strong id="platform-stream-time">No message yet</strong></div>
+              <div id="platform-stream-note">Waiting for a BTC 30s quote from the platform websocket.</div>
+            </div>
+          </div>
+
+          <div class="advanced-section">
+          <div class="group-label">Signal Presets</div>
+          <div class="toggle-row">
+            <button class="pill-button" data-preset="neutral">Neutral</button>
+            <button class="pill-button" data-preset="mild-up">Mild Up Pressure</button>
+            <button class="pill-button" data-preset="strong-up">Strong Up Pressure</button>
+            <button class="pill-button" data-preset="strong-down">Strong Down Pressure</button>
+            <button class="pill-button" data-preset="thin-whipsaw">Thin Whipsaw</button>
+          </div>
+
+          <div class="group-label">Live Inputs</div>
+          <div class="field-grid single">
+            <div class="field">
+              <label for="imbalance">Top-5 notional imbalance</label>
+              <input id="imbalance" type="range" min="-1" max="1" step="0.01" value="0.00" />
+              <div class="range-readout"><span>-1.00</span><span id="imbalance-value">0.00</span><span>+1.00</span></div>
+            </div>
+          </div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label for="persist">Imbalance persistence (s)</label>
+              <input id="persist" type="number" min="0" max="10" step="0.1" value="3.0" />
+            </div>
+            <div class="field">
+              <label for="microprice">Microprice deviation (bps)</label>
+              <input id="microprice" type="number" min="-10" max="10" step="0.1" value="0.0" />
+            </div>
+            <div class="field">
+              <label for="ret3">Return, last 3s (bps)</label>
+              <input id="ret3" type="number" min="-20" max="20" step="0.1" value="0.0" />
+            </div>
+            <div class="field">
+              <label for="ret10">Return, last 10s (bps)</label>
+              <input id="ret10" type="number" min="-30" max="30" step="0.1" value="0.0" />
+            </div>
+            <div class="field advanced-input">
+              <label for="takerFlow">Taker flow imbalance</label>
+              <input id="takerFlow" type="number" min="-1" max="1" step="0.01" value="0.00" />
+            </div>
+            <div class="field advanced-input">
+              <label for="spreadBps">Spread (bps)</label>
+              <input id="spreadBps" type="number" min="0" max="20" step="0.1" value="0.8" />
+            </div>
+            <div class="field">
+              <label for="shortVol">Short-horizon vol (bps)</label>
+              <input id="shortVol" type="number" min="0" max="30" step="0.1" value="4.0" />
+            </div>
+            <div class="field advanced-input">
+              <label for="thinDepth">Thin depth flag (0-1)</label>
+              <input id="thinDepth" type="number" min="0" max="1" step="0.1" value="0.0" />
+            </div>
+          </div>
+          </div>
+
+          <div class="advanced-section">
+          <div class="group-label">Model Weights</div>
+          <div class="field-grid">
+            <div class="field">
+              <label for="bias">Bias</label>
+              <input id="bias" type="number" min="-3" max="3" step="0.01" value="0.00" />
+            </div>
+            <div class="field">
+              <label for="wImbalance">Weight: imbalance</label>
+              <input id="wImbalance" type="number" min="0" max="10" step="0.1" value="2.8" />
+            </div>
+            <div class="field">
+              <label for="wPersist">Weight: persistence</label>
+              <input id="wPersist" type="number" min="0" max="2" step="0.05" value="0.18" />
+            </div>
+            <div class="field">
+              <label for="wMicro">Weight: microprice</label>
+              <input id="wMicro" type="number" min="0" max="1" step="0.01" value="0.10" />
+            </div>
+            <div class="field">
+              <label for="wRet3">Weight: return 3s</label>
+              <input id="wRet3" type="number" min="0" max="1" step="0.01" value="0.16" />
+            </div>
+            <div class="field">
+              <label for="wRet10">Weight: return 10s</label>
+              <input id="wRet10" type="number" min="0" max="1" step="0.01" value="0.07" />
+            </div>
+            <div class="field">
+              <label for="wFlow">Weight: taker flow</label>
+              <input id="wFlow" type="number" min="0" max="3" step="0.05" value="0.85" />
+            </div>
+            <div class="field">
+              <label for="wGate">Weight: gate strength</label>
+              <input id="wGate" type="number" min="0" max="3" step="0.05" value="1.10" />
+            </div>
+            <div class="field">
+              <label for="wLowVolMomentum">Weight: low-vol momentum</label>
+              <input id="wLowVolMomentum" type="number" min="0" max="3" step="0.05" value="0.45" />
+            </div>
+            <div class="field">
+              <label for="lowVolCutoff">Low-vol cutoff (bps)</label>
+              <input id="lowVolCutoff" type="number" min="0" max="20" step="0.1" value="6.0" />
+            </div>
+            <div class="field">
+              <label for="highVolCutoff">High-vol cutoff (bps)</label>
+              <input id="highVolCutoff" type="number" min="0" max="30" step="0.1" value="12.0" />
+            </div>
+          </div>
+
+          <div class="group-label">Confidence Shrink</div>
+          <div class="field-grid">
+            <div class="field">
+              <label for="baseConfidence">Base confidence</label>
+              <input id="baseConfidence" type="number" min="0" max="1" step="0.01" value="0.10" />
+            </div>
+            <div class="field">
+              <label for="confImbalance">Confidence weight: imbalance</label>
+              <input id="confImbalance" type="number" min="0" max="1" step="0.01" value="0.45" />
+            </div>
+            <div class="field">
+              <label for="confPersist">Confidence weight: persistence</label>
+              <input id="confPersist" type="number" min="0" max="1" step="0.01" value="0.25" />
+            </div>
+            <div class="field">
+              <label for="confReturn">Confidence weight: short return</label>
+              <input id="confReturn" type="number" min="0" max="1" step="0.01" value="0.15" />
+            </div>
+            <div class="field">
+              <label for="confFlow">Confidence weight: taker flow</label>
+              <input id="confFlow" type="number" min="0" max="1" step="0.01" value="0.05" />
+            </div>
+            <div class="field">
+              <label for="confThinPenalty">Confidence penalty: thin depth</label>
+              <input id="confThinPenalty" type="number" min="0" max="1" step="0.01" value="0.20" />
+            </div>
+            <div class="field">
+              <label for="confSpreadPenalty">Confidence penalty: spread</label>
+              <input id="confSpreadPenalty" type="number" min="0" max="1" step="0.01" value="0.06" />
+            </div>
+            <div class="field">
+              <label for="confVolPenalty">Confidence penalty: short vol</label>
+              <input id="confVolPenalty" type="number" min="0" max="1" step="0.01" value="0.04" />
+            </div>
+            <div class="field">
+              <label for="confGateBoost">Confidence boost: gate active</label>
+              <input id="confGateBoost" type="number" min="0" max="1" step="0.01" value="0.20" />
+            </div>
+          </div>
+          </div>
+
+          <div class="action-row">
+            <button id="stream-toggle" class="action-button">Start 2s Stream</button>
+            <button id="reset-tape" class="action-button secondary">Clear Tape</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="workspace">
+        <div class="quote-grid">
+          <div class="quote-card">
+            <div class="quote-head">
+              <div>
+                <h2>Live Quote</h2>
+                <p>Signal-driven fair probability first, then constant-edge payouts on top.</p>
+              </div>
+              <div id="state-chip" class="state-chip neutral">Neutral</div>
+            </div>
+
+            <div class="big-quotes">
+              <div class="quote-box">
+                <div class="side"><span>UP payout</span><span id="up-prob">50.00%</span></div>
+                <div class="payout" id="up-payout">92.00</div>
+                <div class="meta" id="up-meta">Neutral side</div>
+              </div>
+              <div class="quote-box">
+                <div class="side"><span>DOWN payout</span><span id="down-prob">50.00%</span></div>
+                <div class="payout" id="down-payout">92.00</div>
+                <div class="meta" id="down-meta">Neutral side</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="quote-card">
+            <div class="quote-head">
+              <div>
+                <h2>Platform Stream Quote</h2>
+                <p>Direct websocket view of the platform’s streamed BTC 30s odds. Best payout should win flow.</p>
+              </div>
+              <div id="platform-quote-chip" class="state-chip neutral">No Quote</div>
+            </div>
+
+            <div class="big-quotes">
+              <div class="quote-box">
+                <div class="side"><span>Platform UP</span><span id="platform-up-win">-</span></div>
+                <div class="payout" id="platform-up-payout">-</div>
+                <div class="meta" id="platform-up-meta">Waiting for streamed quote</div>
+              </div>
+              <div class="quote-box">
+                <div class="side"><span>Platform DOWN</span><span id="platform-down-win">-</span></div>
+                <div class="payout" id="platform-down-payout">-</div>
+                <div class="meta" id="platform-down-meta">Waiting for streamed quote</div>
+              </div>
+            </div>
+
+            <div class="metric-grid" style="margin-top:14px;">
+              <div class="metric">
+                <span>Matched Product</span>
+                <strong id="platform-product">BTC 30s</strong>
+                <small id="platform-product-note">Best-effort parser looks for BTC/USDT and 30-second quotes in the stream.</small>
+              </div>
+              <div class="metric">
+                <span>Quote Timestamp</span>
+                <strong id="platform-quote-time">-</strong>
+                <small id="platform-quote-note">Live platform stream timestamp when available.</small>
+              </div>
+              <div class="metric">
+                <span>Implied Edge</span>
+                <strong id="platform-implied-edge">-</strong>
+                <small id="platform-implied-edge-note">Reverse-calculated from the UP/DOWN quote pair as the locked-spread edge.</small>
+              </div>
+              <div class="metric">
+                <span>Quoted Overround</span>
+                <strong id="platform-overround">-</strong>
+                <small id="platform-overround-note">Sum of quoted probabilities implied by both payouts.</small>
+              </div>
+              <div class="metric">
+                <span>UP Price Delta vs Platform</span>
+                <strong id="platform-up-edge">-</strong>
+                <small id="platform-up-edge-note">Positive means our UP payout is richer than the platform quote.</small>
+              </div>
+              <div class="metric">
+                <span>DOWN Price Delta vs Platform</span>
+                <strong id="platform-down-edge">-</strong>
+                <small id="platform-down-edge-note">Positive means our DOWN payout is richer than the platform quote.</small>
+              </div>
+            </div>
+
+            <div class="stream-preview" id="platform-raw">No platform websocket payload yet.</div>
+          </div>
+
+          <div class="quote-card">
+            <div class="quote-head">
+              <div>
+                <h2>Public Trade Stream Monitor</h2>
+                <p>Uses Turboflow public `dex_predict_market` trades in real time. This is the fast path for who would win flow.</p>
+              </div>
+              <div id="trade-stream-chip" class="state-chip neutral">Idle</div>
+            </div>
+
+            <div class="metric-grid">
+              <div class="metric">
+                <span>Trade Stream Status</span>
+                <strong id="trade-stream-status">Offline</strong>
+                <small id="trade-stream-note">Waiting for public market trades.</small>
+              </div>
+              <div class="metric">
+                <span>Your Stream PnL</span>
+                <strong id="stream-our-pnl">0.00</strong>
+                <small id="stream-our-pnl-note">Counterfactual PnL from BTC 30s trades won off the public stream.</small>
+              </div>
+              <div class="metric">
+                <span>Competed Trades</span>
+                <strong id="stream-competed-trades">0</strong>
+                <small id="stream-competed-note">Trades where our quote beat the platform payout at trade time.</small>
+              </div>
+              <div class="metric">
+                <span>Settled Routed Trades</span>
+                <strong id="stream-settled-trades">0</strong>
+                <small id="stream-settled-note">Won <span id="stream-wins-inline">0</span> / Lost <span id="stream-losses-inline">0</span>.</small>
+              </div>
+              <div class="metric">
+                <span>Competed Volume</span>
+                <strong id="stream-competed-volume">0.00</strong>
+                <small id="stream-competed-volume-note">Total BTC 30s size routed to our quote from the stream.</small>
+              </div>
+              <div class="metric">
+                <span>Trades Seen</span>
+                <strong id="stream-seen-trades">0</strong>
+                <small id="stream-seen-note">All BTC 30s public trades seen since this page loaded.</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="quote-card">
+            <div class="quote-head">
+              <div>
+                <h2>Probability Engine</h2>
+                <p>Raw score, raw probability, confidence shrink, then displayed probability.</p>
+              </div>
+            </div>
+            <div class="metric-grid">
+              <div class="metric">
+                <span>Raw Score</span>
+                <strong id="raw-score">0.000</strong>
+                <small>Logit-style signal before any shrink toward neutral.</small>
+              </div>
+              <div class="metric">
+                <span>Raw P(up)</span>
+                <strong id="raw-prob">50.00%</strong>
+                <small>Direct sigmoid of the score using current market inputs.</small>
+              </div>
+              <div class="metric">
+                <span>Confidence</span>
+                <strong id="confidence">10.0%</strong>
+                <small>How much of the raw deviation from neutral we trust right now.</small>
+              </div>
+              <div class="metric">
+                <span>Displayed P(up)</span>
+                <strong id="display-prob">50.00%</strong>
+                <small>This is the live probability that actually feeds the payouts.</small>
+              </div>
+              <div class="metric">
+                <span>Regime</span>
+                <strong id="vol-regime">Neutral</strong>
+                <small id="vol-regime-note">Vol changes how much we trust the imbalance signal. High vol shrinks it; otherwise the quote stays close to the book gate.</small>
+              </div>
+              <div class="metric">
+                <span>Gate Active</span>
+                <strong id="gate-state">No</strong>
+                <small id="gate-note">Best backtest state was top-5 imbalance above 0.50 lasting about 3 seconds.</small>
+              </div>
+              <div class="metric">
+                <span>Why This Quote</span>
+                <strong id="regime-driver">Neutral tape</strong>
+                <small id="regime-driver-note">The system should tell you the orderbook regime, not make you infer it from raw knobs.</small>
+              </div>
+              <div class="metric">
+                <span>Gross Edge</span>
+                <strong id="gross-edge">4.00%</strong>
+                <small>Target house edge before any PFOF or operating drag.</small>
+              </div>
+              <div class="metric">
+                <span>Net Keep</span>
+                <strong id="net-keep">1.50%</strong>
+                <small>Gross edge minus the configured PFOF / cost drag.</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="quote-card">
+          <div class="quote-head">
+            <div>
+              <h2>Signal Contribution Board</h2>
+              <p>Positive bars push toward UP. Negative bars push toward DOWN. This helps see which market inputs are actually moving the quote.</p>
+            </div>
+          </div>
+          <table class="panel-table">
+            <thead>
+              <tr>
+                <th>Signal</th>
+                <th>Value</th>
+                <th>Contribution</th>
+              </tr>
+            </thead>
+            <tbody id="contrib-body"></tbody>
+          </table>
+        </div>
+
+        <div class="quote-grid">
+          <div class="tape-card">
+            <h2>Live Quote Tape</h2>
+            <p class="subtle">Every stream tick logs the derived favored side, displayed probability, payouts, and estimated net keep.</p>
+            <table class="tape-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Favored</th>
+                  <th>P(up)</th>
+                  <th>UP</th>
+                  <th>DOWN</th>
+                  <th>Net Keep</th>
+                </tr>
+              </thead>
+              <tbody id="tape-body"></tbody>
+            </table>
+          </div>
+
+          <div class="notes-card">
+            <h2>Factor Explainer</h2>
+            <ul>
+              <li><strong>Gross edge:</strong> your target hold before costs. A `4%` edge means you quote as if you want to keep `4` dollars per `100` staked if the mid is right.</li>
+              <li><strong>PFOF / cost drag:</strong> the percentage you expect to give away after pricing. `Net keep = gross edge - PFOF`.</li>
+              <li><strong>Top-5 notional imbalance:</strong> the main directional signal. Positive means the front of the book is more bid-heavy; negative means it is more offer-heavy.</li>
+              <li>Defaults are anchored to the strongest 7-day backtest we found: top-5 notional imbalance, `0.5` threshold, `3s` persistence, with triggered-state `P(up) ≈ 59.24%`.</li>
+              <li><strong>Directional vs confidence factors:</strong> imbalance and persistence move the fair probability. Spread, thin depth, and jumpy vol mainly shrink confidence instead of pushing the quote UP or DOWN.</li>
+              <li><strong>What is intentionally left out:</strong> this version is imbalance-first. Short-term flow confirmation is not moving the live quote by default until it proves itself out of sample.</li>
+              <li><strong>What to review after launch:</strong> realized edge by state bucket: neutral, mild pressure, strong pressure, and high-vol shrink.</li>
+              <li><strong>Persistence:</strong> how long that imbalance has lasted. The backtests liked pressure that stayed in place for about `3s`, not one noisy snapshot.</li>
+              <li><strong>Microprice deviation:</strong> a small confirmation signal showing whether top-of-book weighting leans above or below the displayed mid.</li>
+              <li><strong>Short-horizon vol:</strong> mainly a confidence control. Higher vol shrinks the quote back toward neutral because book pressure is less reliable in jumpy tape.</li>
+              <li><strong>Thin depth:</strong> another confidence control. Thin books can exaggerate imbalance, so the model trusts the raw directional signal less when depth is weak.</li>
+              <li><strong>Max favored P:</strong> a safety cap on how far the displayed probability can move away from `50/50`, even if the raw model gets more excited.</li>
+              <li><strong>Quote cadence:</strong> how long each live quote stays fixed before the next refresh. This is aligned to exact wall-clock windows so routing uses one stable quote per interval.</li>
+              <li><strong>Calibrate button:</strong> picks the strongest embedded backtest gate for the selected window and product, then writes those settings into the live gate and smoothing profile.</li>
+              <li><strong>Today vs Last 7d:</strong> the switch changes the ranking metric. If both settings pick the same winner, that means the same depth and threshold combo was best in both windows.</li>
+              <li><strong>Platform stream quote:</strong> this is Turboflow's actual public quote. The platform card shows their total implied edge plus the payout delta between our quote and theirs.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="quote-card">
+          <div class="quote-head">
+            <div>
+              <h2>Constant-Edge Payout Ladder</h2>
+              <p>Rounded reference ladder for quick operations review. This updates automatically when you change the gross edge target.</p>
+            </div>
+          </div>
+          <table class="panel-table">
+            <thead>
+              <tr>
+                <th>Favored P</th>
+                <th>Favored payout</th>
+                <th>Other payout</th>
+                <th>Gross edge / $100</th>
+                <th>Approx net keep</th>
+              </tr>
+            </thead>
+            <tbody id="ladder-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const presets = {
+      neutral: {
+        imbalance: 0,
+        persist: 0,
+        microprice: 0,
+        ret3: 0,
+        ret10: 0,
+        takerFlow: 0,
+        spreadBps: 0.8,
+        shortVol: 4,
+        thinDepth: 0
+      },
+      "mild-up": {
+        imbalance: 0.28,
+        persist: 2.0,
+        microprice: 0.8,
+        ret3: 1.2,
+        ret10: 2.6,
+        takerFlow: 0.16,
+        spreadBps: 0.7,
+        shortVol: 7.2,
+        thinDepth: 0
+      },
+      "strong-up": {
+        imbalance: 0.58,
+        persist: 4.0,
+        microprice: 1.8,
+        ret3: 2.6,
+        ret10: 4.8,
+        takerFlow: 0.34,
+        spreadBps: 0.8,
+        shortVol: 8.0,
+        thinDepth: 0.2
+      },
+      "strong-down": {
+        imbalance: -0.62,
+        persist: 4.2,
+        microprice: -2.0,
+        ret3: -3.1,
+        ret10: -6.4,
+        takerFlow: -0.36,
+        spreadBps: 0.9,
+        shortVol: 5.8,
+        thinDepth: 0.2
+      },
+      "low-vol-chase": {
+        imbalance: 0.51,
+        persist: 3.3,
+        microprice: 1.0,
+        ret3: 1.3,
+        ret10: 1.9,
+        takerFlow: 0.18,
+        spreadBps: 0.6,
+        shortVol: 3.4,
+        thinDepth: 0.1
+      },
+      "thin-whipsaw": {
+        imbalance: 0.44,
+        persist: 3.2,
+        microprice: 1.0,
+        ret3: 0.9,
+        ret10: 1.8,
+        takerFlow: 0.10,
+        spreadBps: 1.8,
+        shortVol: 10.5,
+        thinDepth: 0.8
+      }
+    };
+
+    const fallbackCalibration = {
+      label: "Last 7d winner",
+      kind: "notional",
+      depth: 5,
+      threshold: 0.50,
+      persist: 3.0,
+      triggeredProbability: 0.5924,
+      maxProbabilityPct: 60.3,
+      lowVolCutoff: 6.0,
+      highVolCutoff: 12.0,
+      mildGateMin: 0.15,
+      strongGateMin: 0.65,
+      mildShift: 0.0462,
+      strongShift: 0.0924,
+      highVolShiftCap: 0.025,
+      alphaMin: 0.05,
+      alphaMax: 0.18,
+      maxStepPerSecond: 0.006,
+      neutralSnapBand: 0.0015,
+      last7Improvement30: 31617.229,
+      triggeredOrders30: 22486
+    };
+
+    const backtestCandidates = [
+      { kind: "notional", depth: 5, threshold: 0.5, last7_30_improvement: 31617.229000000378, last7_1m_improvement: 1862.911000000004, today_30_improvement: 5407.432999999981, today_1m_improvement: 472.1529999999998, last7_30_triggered_orders: 22486, last7_1m_triggered_orders: 2845 },
+      { kind: "size", depth: 5, threshold: 0.5, last7_30_improvement: 31617.229000000378, last7_1m_improvement: 1862.911000000004, today_30_improvement: 5407.432999999981, today_1m_improvement: 472.1529999999998, last7_30_triggered_orders: 22486, last7_1m_triggered_orders: 2845 },
+      { kind: "notional", depth: 10, threshold: 0.5, last7_30_improvement: 31391.77000000039, last7_1m_improvement: 1837.2260000000038, today_30_improvement: 5268.28199999998, today_1m_improvement: 463.40199999999976, last7_30_triggered_orders: 22366, last7_1m_triggered_orders: 2829 },
+      { kind: "size", depth: 10, threshold: 0.5, last7_30_improvement: 31391.77000000039, last7_1m_improvement: 1837.2260000000038, today_30_improvement: 5268.28199999998, today_1m_improvement: 463.40199999999976, last7_30_triggered_orders: 22366, last7_1m_triggered_orders: 2829 },
+      { kind: "notional", depth: 25, threshold: 0.5, last7_30_improvement: 29795.266000000378, last7_1m_improvement: 1687.8450000000043, today_30_improvement: 4949.569999999984, today_1m_improvement: 438.79199999999975, last7_30_triggered_orders: 21512, last7_1m_triggered_orders: 2699 },
+      { kind: "size", depth: 25, threshold: 0.5, last7_30_improvement: 29783.37600000037, last7_1m_improvement: 1687.8450000000043, today_30_improvement: 4949.569999999984, today_1m_improvement: 438.79199999999975, last7_30_triggered_orders: 21509, last7_1m_triggered_orders: 2700 },
+      { kind: "notional", depth: 5, threshold: 0.6, last7_30_improvement: 22797.02400000018, last7_1m_improvement: 1344.2270000000024, today_30_improvement: 3790.241999999996, today_1m_improvement: 408.9779999999998, last7_30_triggered_orders: 15387, last7_1m_triggered_orders: 1937 },
+      { kind: "size", depth: 5, threshold: 0.6, last7_30_improvement: 22797.02400000018, last7_1m_improvement: 1344.2270000000024, today_30_improvement: 3790.241999999996, today_1m_improvement: 408.9779999999998, last7_30_triggered_orders: 15387, last7_1m_triggered_orders: 1937 },
+      { kind: "size", depth: 10, threshold: 0.6, last7_30_improvement: 22504.036000000182, last7_1m_improvement: 1263.172000000002, today_30_improvement: 3685.7179999999944, today_1m_improvement: 377.59699999999987, last7_30_triggered_orders: 15308, last7_1m_triggered_orders: 1888 },
+      { kind: "notional", depth: 10, threshold: 0.6, last7_30_improvement: 22502.036000000182, last7_1m_improvement: 1263.172000000002, today_30_improvement: 3685.7179999999944, today_1m_improvement: 377.59699999999987, last7_30_triggered_orders: 15307, last7_1m_triggered_orders: 1888 },
+      { kind: "size", depth: 25, threshold: 0.6, last7_30_improvement: 21382.068000000152, last7_1m_improvement: 1101.9210000000012, today_30_improvement: 3361.8819999999937, today_1m_improvement: 323.9919999999998, last7_30_triggered_orders: 14589, last7_1m_triggered_orders: 1816 },
+      { kind: "notional", depth: 25, threshold: 0.6, last7_30_improvement: 21381.86800000015, last7_1m_improvement: 1103.9210000000012, today_30_improvement: 3361.681999999994, today_1m_improvement: 323.9919999999998, last7_30_triggered_orders: 14588, last7_1m_triggered_orders: 1815 }
+    ];
+
+    const fittedMidModel = {
+      intercept: 0.0016059802166241638,
+      features: [
+        "imb_top5_notional",
+        "imb_top5_size",
+        "imb_top10_notional",
+        "imb_top10_size",
+        "signed_persist_05",
+        "signed_persist_06",
+        "microprice_dev_bps",
+        "spread_bps",
+        "vol_10s_bps",
+        "thin_depth",
+        "ret_abs_3s",
+        "ret_abs_10s"
+      ],
+      coef: [
+        0.06273447354771504,
+        0.06273446959438328,
+        0.06936704189926392,
+        0.06936735774706378,
+        0.007406212979310936,
+        0.014327121653238297,
+        0.004578973922674152,
+        0.00826405707708158,
+        -0.010307167579067118,
+        0.027813790158738888,
+        0.005321690423580252,
+        0.005021981004479234
+      ],
+      means: [
+        0.0378447340347049,
+        0.037845244667215124,
+        0.038036388610729874,
+        0.038037293808164695,
+        0.4153580379773722,
+        0.326163605726342,
+        0.00024013008734844412,
+        0.013099253642590982,
+        0.33472868136956463,
+        0.10405281583553413,
+        0.4535877151305044,
+        1.1303792470977412
+      ],
+      scales: [
+        0.6113599024864619,
+        0.6113598879687189,
+        0.6083446528653582,
+        0.6083446346151608,
+        8.975640229994521,
+        6.685081961532784,
+        0.006033484482267013,
+        0.010225268564513394,
+        0.39108435327290264,
+        0.15219289420514417,
+        0.847978495762525,
+        1.5093100001279824
+      ],
+      accuracyTradeWeightedPct: 55.3,
+      tradeLogloss: 0.68349,
+      tradeBrier: 0.24521
+    };
+
+    let runtimeCalibration = { ...fallbackCalibration };
+
+    let streamHandle = null;
+    let streamTick = 0;
+    let autoFeedHandle = null;
+    let autoFeedEnabled = true;
+    let liveHistory = [];
+    let livePersistenceSeconds = 0;
+    let lastFeedSign = 0;
+    let lastFeedSignTime = null;
+    let latestFeatureVector = {
+      imb_top5_notional: 0,
+      imb_top5_size: 0,
+      imb_top10_notional: 0,
+      imb_top10_size: 0,
+      signed_persist_05: 0,
+      signed_persist_06: 0,
+      microprice_dev_bps: 0,
+      spread_bps: 0,
+      vol_10s_bps: 0,
+      thin_depth: 0,
+      ret_abs_3s: 0,
+      ret_abs_10s: 0
+    };
+    let quoteState = {
+      displayProbability: 0.5,
+      lastUpdateTs: null,
+      windowStartTs: null
+    };
+    let lastRenderedModel = null;
+    let localQuoteHistory = [];
+    let publicTradeMonitor = {
+      status: "offline",
+      seenTradeIds: new Set(),
+      routedById: new Map(),
+      seenTrades: 0,
+      competedTrades: 0,
+      settledTrades: 0,
+      competedVolume: 0,
+      ourPnl: 0,
+      wins: 0,
+      losses: 0,
+      lastTradeTs: null
+    };
+    let platformSocket = null;
+    let platformConfigPollHandle = null;
+    let platformStreamState = {
+      status: "disconnected",
+      lastMessageTs: null,
+      lastRawMessage: null,
+      lastQuote: null,
+      source: "none"
+    };
+    let autoFeedStartHandle = null;
+
+    function quoteWindowMs(inputs = null) {
+      const cadenceSeconds = inputs?.cadence != null ? Number(inputs.cadence) : readNumber("cadence");
+      return Math.max(2, Math.round(cadenceSeconds || 2)) * 1000;
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function sigmoid(x) {
+      return 1 / (1 + Math.exp(-x));
+    }
+
+    function safeJsonPreview(value) {
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch (error) {
+        return String(value);
+      }
+    }
+
+    function payoutForProbability(probability, edgePercent) {
+      const grossMultiplier = 1 - edgePercent / 100;
+      return 100 * grossMultiplier / probability - 100;
+    }
+
+    function impliedProbabilityFromPayout(payout) {
+      return 100 / (100 + payout);
+    }
+
+    function impliedEdgeFromTwoWayQuote(upPayout, downPayout) {
+      const upProb = impliedProbabilityFromPayout(upPayout);
+      const downProb = impliedProbabilityFromPayout(downPayout);
+      const overround = upProb + downProb;
+      if (!Number.isFinite(overround) || overround <= 0) {
+        return { impliedEdgePct: null, overroundPct: null };
+      }
+      return {
+        impliedEdgePct: (1 - 1 / overround) * 100,
+        overroundPct: overround * 100
+      };
+    }
+
+    function trackLocalQuote(model) {
+      const snapshot = {
+        ts_ms: Number(model.quoteTimestampMs ?? Date.now()),
+        up_payout: Number(model.upPayout),
+        down_payout: Number(model.downPayout),
+        display_probability: Number(model.displayProbability),
+        regime: String(model.regimeLabel || "Unknown")
+      };
+      const last = localQuoteHistory[localQuoteHistory.length - 1];
+      if (last && last.ts_ms === snapshot.ts_ms) {
+        last.up_payout = snapshot.up_payout;
+        last.down_payout = snapshot.down_payout;
+        last.display_probability = snapshot.display_probability;
+        last.regime = snapshot.regime;
+        return;
+      }
+      localQuoteHistory.push(snapshot);
+      if (localQuoteHistory.length > 20000) {
+        localQuoteHistory = localQuoteHistory.slice(-20000);
+      }
+    }
+
+    function quoteForTradeTimestamp(tsMs) {
+      if (!localQuoteHistory.length) return null;
+      let lo = 0;
+      let hi = localQuoteHistory.length - 1;
+      let best = null;
+      while (lo <= hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        const item = localQuoteHistory[mid];
+        if (item.ts_ms <= tsMs) {
+          best = item;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      return best;
+    }
+
+    function readNumber(id) {
+      return Number($(id).value);
+    }
+
+    function setInputValue(id, value, decimals = null) {
+      const element = $(id);
+      if (!element || value == null || Number.isNaN(Number(value))) return;
+      element.value = decimals == null ? String(value) : Number(value).toFixed(decimals);
+    }
+
+    function interpolateHistory(secondsAgo) {
+      const target = Date.now() - secondsAgo * 1000;
+      for (let i = liveHistory.length - 1; i >= 0; i -= 1) {
+        if (liveHistory[i].ts <= target) {
+          return liveHistory[i];
+        }
+      }
+      return liveHistory[0] || null;
+    }
+
+    function stddev(values) {
+      if (values.length < 2) return 0;
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1);
+      return Math.sqrt(Math.max(variance, 0));
+    }
+
+    function persistenceForThreshold(threshold) {
+      if (!liveHistory.length) return 0;
+      const last = liveHistory[liveHistory.length - 1];
+      const current = last.top5Imbalance;
+      const currentSign = current >= threshold ? 1 : current <= -threshold ? -1 : 0;
+      if (currentSign === 0) return 0;
+      let earliestTs = last.ts;
+      for (let i = liveHistory.length - 1; i >= 0; i -= 1) {
+        const val = liveHistory[i].top5Imbalance;
+        const sign = val >= threshold ? 1 : val <= -threshold ? -1 : 0;
+        if (sign !== currentSign) break;
+        earliestTs = liveHistory[i].ts;
+      }
+      const seconds = Math.max(0, (last.ts - earliestTs) / 1000);
+      return currentSign * seconds;
+    }
+
+    function fittedProbabilityFromFeatures(features) {
+      let score = fittedMidModel.intercept;
+      for (let i = 0; i < fittedMidModel.features.length; i += 1) {
+        const key = fittedMidModel.features[i];
+        const raw = Number(features[key] ?? 0);
+        const z = (raw - fittedMidModel.means[i]) / Math.max(fittedMidModel.scales[i], 1e-9);
+        score += fittedMidModel.coef[i] * z;
+      }
+      return sigmoid(score);
+    }
+
+    function updateFeedBadge(mode, mid = null, spread = null) {
+      const badge = $("feed-badge");
+      badge.textContent = mode;
+      badge.className = `feed-badge ${mode === "Live" ? "live" : "manual"}`;
+      if (mid != null) $("feed-mid").textContent = formatNum(mid, 2);
+      if (spread != null) $("feed-spread").textContent = `${formatNum(spread, 2)} bps`;
+      $("feed-updated").textContent = new Date().toLocaleTimeString();
+    }
+
+    function applyCalibration(config, source = null) {
+      runtimeCalibration = { ...runtimeCalibration, ...config };
+      quoteState = {
+        displayProbability: 0.5,
+        lastUpdateTs: null,
+        windowStartTs: null
+      };
+      setInputValue("imbalanceThreshold", runtimeCalibration.threshold, 2);
+      setInputValue("persistGate", runtimeCalibration.persist, 1);
+      setInputValue("maxProb", runtimeCalibration.maxProbabilityPct, 1);
+      setInputValue("lowVolCutoff", runtimeCalibration.lowVolCutoff, 1);
+      setInputValue("highVolCutoff", runtimeCalibration.highVolCutoff, 1);
+
+      $("calibration-state").textContent = source || runtimeCalibration.label || "Calibrated";
+      const uplift = runtimeCalibration.selectedImprovement;
+      const orders = runtimeCalibration.triggeredOrders30;
+      const windowLabel = runtimeCalibration.calibrationWindowLabel || "last 7d";
+      const metricLabel = runtimeCalibration.calibrationMetricLabel || "30s";
+      if (uplift != null) {
+        const upliftText = `${metricLabel} uplift +${formatNum(uplift, 0)} on ${windowLabel}`;
+        $("calibration-pnl").textContent = windowLabel === "last 7d" && orders != null
+          ? `${upliftText}, ${formatNum(orders, 0)} triggered orders`
+          : upliftText;
+      } else {
+        $("calibration-pnl").textContent = "Backtest winner loaded into live gate";
+      }
+      $("calibration-time").textContent = new Date().toLocaleTimeString();
+      $("calibration-detail").textContent =
+        `Applied top ${runtimeCalibration.depth || 5} ${runtimeCalibration.kind || "notional"} / threshold ${formatNum(runtimeCalibration.threshold || fallbackCalibration.threshold, 2)} / persist ${formatNum(runtimeCalibration.persist || fallbackCalibration.persist, 1)}s / max P ${formatNum(runtimeCalibration.maxProbabilityPct || fallbackCalibration.maxProbabilityPct, 1)}%. ${runtimeCalibration.calibrationNote || ""}`.trim();
+      render();
+    }
+
+    function calibrateFromBacktest() {
+      const button = $("calibrate-btn");
+      const originalLabel = button.textContent;
+      button.textContent = "Calibrating...";
+      button.disabled = true;
+
+      try {
+        const calibrationWindow = $("calibrationWindow").value;
+        const calibrationMetric = $("calibrationMetric").value;
+        const rankingField = calibrationWindow === "today"
+          ? (calibrationMetric === "30" ? "today_30_improvement" : "today_1m_improvement")
+          : (calibrationMetric === "30" ? "last7_30_improvement" : "last7_1m_improvement");
+        const top = [...backtestCandidates]
+          .sort((a, b) => Number(b[rankingField] ?? -Infinity) - Number(a[rankingField] ?? -Infinity))[0];
+        if (!top) throw new Error("No embedded backtest winner found");
+
+        const edge = readNumber("edge");
+        const baseShift = fallbackCalibration.triggeredProbability - 0.5;
+        const stepScale = calibrationMetric === "30" ? 1 : 0.8;
+        const alphaScale = calibrationWindow === "today" ? 1.15 : 1.0;
+        const uplift = Number(top[rankingField] ?? fallbackCalibration.last7Improvement30);
+        const triggeredOrders = calibrationWindow === "last7"
+          ? Number(top[calibrationMetric === "30" ? "last7_30_triggered_orders" : "last7_1m_triggered_orders"] ?? 0)
+          : null;
+        const sameAsFallback =
+          Number(top.depth ?? fallbackCalibration.depth) === Number(fallbackCalibration.depth) &&
+          Number(top.threshold ?? fallbackCalibration.threshold) === Number(fallbackCalibration.threshold) &&
+          String(top.kind ?? fallbackCalibration.kind) === String(fallbackCalibration.kind);
+        applyCalibration({
+          label: `${calibrationWindow === "today" ? "Today" : "Last 7d"} fit`,
+          kind: top.kind,
+          depth: Number(top.depth ?? fallbackCalibration.depth),
+          threshold: Number(top.threshold ?? fallbackCalibration.threshold),
+          persist: fallbackCalibration.persist,
+          triggeredProbability: fallbackCalibration.triggeredProbability,
+          maxProbabilityPct: edge <= 4 ? 60.0 : Math.min((fallbackCalibration.triggeredProbability + 0.011) * 100, 60.8),
+          lowVolCutoff: fallbackCalibration.lowVolCutoff,
+          highVolCutoff: fallbackCalibration.highVolCutoff,
+          mildGateMin: fallbackCalibration.mildGateMin,
+          strongGateMin: fallbackCalibration.strongGateMin,
+          mildShift: baseShift / 2,
+          strongShift: baseShift,
+          highVolShiftCap: fallbackCalibration.highVolShiftCap,
+          alphaMin: fallbackCalibration.alphaMin,
+          alphaMax: Math.min(0.22, fallbackCalibration.alphaMax * alphaScale),
+          maxStepPerSecond: fallbackCalibration.maxStepPerSecond * stepScale,
+          neutralSnapBand: fallbackCalibration.neutralSnapBand,
+          calibrationWindowLabel: calibrationWindow === "today" ? "today" : "last 7d",
+          calibrationMetricLabel: calibrationMetric === "30" ? "30s" : "1m",
+          selectedImprovement: uplift,
+          triggeredOrders30: triggeredOrders,
+          calibrationNote: sameAsFallback
+            ? "Same gate won under this selected window."
+            : "Selected window changed the winning gate."
+        }, `${calibrationWindow === "today" ? "Today" : "Last 7d"} best: top ${top.depth} ${top.kind}, ${calibrationMetric}`);
+      } catch (error) {
+        console.error(error);
+        applyCalibration(fallbackCalibration, "Embedded last 7d winner");
+      } finally {
+        button.textContent = "Calibrated";
+        window.setTimeout(() => {
+          button.textContent = originalLabel;
+          button.disabled = false;
+        }, 900);
+      }
+    }
+
+    async function pullLiveFeed() {
+      try {
+        const response = await fetch("https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=10", { cache: "no-store" });
+        const data = await response.json();
+        if (!data.bids || !data.asks) return;
+
+        const bids = data.bids.map(([price, qty]) => ({ price: Number(price), qty: Number(qty) }));
+        const asks = data.asks.map(([price, qty]) => ({ price: Number(price), qty: Number(qty) }));
+        const bestBid = bids[0];
+        const bestAsk = asks[0];
+        if (!bestBid || !bestAsk) return;
+
+        const sumLevels = (levels, depth, mapper) => levels.slice(0, depth).reduce((sum, level) => sum + mapper(level), 0);
+        const bidNotional5 = sumLevels(bids, 5, (level) => level.price * level.qty);
+        const askNotional5 = sumLevels(asks, 5, (level) => level.price * level.qty);
+        const bidSize5 = sumLevels(bids, 5, (level) => level.qty);
+        const askSize5 = sumLevels(asks, 5, (level) => level.qty);
+        const bidNotional10 = sumLevels(bids, 10, (level) => level.price * level.qty);
+        const askNotional10 = sumLevels(asks, 10, (level) => level.price * level.qty);
+        const bidSize10 = sumLevels(bids, 10, (level) => level.qty);
+        const askSize10 = sumLevels(asks, 10, (level) => level.qty);
+        const top5Imbalance = (bidNotional5 - askNotional5) / Math.max(bidNotional5 + askNotional5, 0.0001);
+        const top5SizeImbalance = (bidSize5 - askSize5) / Math.max(bidSize5 + askSize5, 0.0001);
+        const top10Imbalance = (bidNotional10 - askNotional10) / Math.max(bidNotional10 + askNotional10, 0.0001);
+        const top10SizeImbalance = (bidSize10 - askSize10) / Math.max(bidSize10 + askSize10, 0.0001);
+
+        const bestBidNotional = bestBid.price * bestBid.qty;
+        const bestAskNotional = bestAsk.price * bestAsk.qty;
+        const mid = (bestBid.price + bestAsk.price) / 2;
+        const microprice = ((bestAsk.price * bestBid.qty) + (bestBid.price * bestAsk.qty)) / Math.max(bestBid.qty + bestAsk.qty, 0.0001);
+        const micropriceDeviationBps = ((microprice - mid) / mid) * 10000;
+        const spreadBps = ((bestAsk.price - bestBid.price) / mid) * 10000;
+
+        const now = Date.now();
+        liveHistory.push({
+          ts: now,
+          mid,
+          top5Imbalance,
+          top10Imbalance,
+          top5SizeImbalance,
+          top10SizeImbalance,
+          totalDepth: bidNotional10 + askNotional10
+        });
+        while (liveHistory.length > 60) {
+          liveHistory.shift();
+        }
+
+        const sign = top5Imbalance >= 0 ? (top5Imbalance > 0 ? 1 : 0) : -1;
+        if (sign !== lastFeedSign) {
+          lastFeedSign = sign;
+          lastFeedSignTime = now;
+        }
+        livePersistenceSeconds = sign === 0 || !lastFeedSignTime ? 0 : (now - lastFeedSignTime) / 1000;
+
+        const hist3 = interpolateHistory(3);
+        const hist10 = interpolateHistory(10);
+        const ret3 = hist3 ? ((mid - hist3.mid) / hist3.mid) * 10000 : 0;
+        const ret10 = hist10 ? ((mid - hist10.mid) / hist10.mid) * 10000 : 0;
+
+        const recentReturns = [];
+        for (let i = 1; i < liveHistory.length; i += 1) {
+          const prev = liveHistory[i - 1];
+          const curr = liveHistory[i];
+          recentReturns.push(((curr.mid - prev.mid) / prev.mid) * 10000);
+        }
+        const shortVol = stddev(recentReturns.slice(-10));
+
+        const totalDepths = liveHistory.map((item) => item.totalDepth).sort((a, b) => a - b);
+        const medianDepth = totalDepths.length
+          ? totalDepths[Math.floor(totalDepths.length / 2)]
+          : bidNotional10 + askNotional10;
+        const currentDepth = bidNotional10 + askNotional10;
+        const thinDepth = clamp(1 - currentDepth / Math.max(medianDepth, 0.0001), 0, 1);
+        const signedPersist05 = persistenceForThreshold(0.5);
+        const signedPersist06 = persistenceForThreshold(0.6);
+
+        latestFeatureVector = {
+          imb_top5_notional: top5Imbalance,
+          imb_top5_size: top5SizeImbalance,
+          imb_top10_notional: top10Imbalance,
+          imb_top10_size: top10SizeImbalance,
+          signed_persist_05: signedPersist05,
+          signed_persist_06: signedPersist06,
+          microprice_dev_bps: micropriceDeviationBps,
+          spread_bps: spreadBps,
+          vol_10s_bps: shortVol,
+          thin_depth: thinDepth,
+          ret_abs_3s: Math.abs(ret3),
+          ret_abs_10s: Math.abs(ret10)
+        };
+
+        $("imbalance").value = top5Imbalance.toFixed(2);
+        $("persist").value = livePersistenceSeconds.toFixed(1);
+        $("microprice").value = micropriceDeviationBps.toFixed(1);
+        $("ret3").value = ret3.toFixed(1);
+        $("ret10").value = ret10.toFixed(1);
+        $("spreadBps").value = spreadBps.toFixed(1);
+        $("shortVol").value = shortVol.toFixed(1);
+        $("thinDepth").value = thinDepth.toFixed(2);
+        $("takerFlow").value = "0.00";
+
+        updateFeedBadge("Live", mid, spreadBps);
+        render();
+      } catch (error) {
+        console.error(error);
+        updateFeedBadge("Manual");
+      }
+    }
+
+    function currentInputs() {
+      return {
+        edge: readNumber("edge"),
+        pfof: readNumber("pfof"),
+        cadence: readNumber("cadence"),
+        maxProb: readNumber("maxProb"),
+        imbalanceThreshold: readNumber("imbalanceThreshold"),
+        persistGate: readNumber("persistGate"),
+        bias: readNumber("bias"),
+        imbalance: readNumber("imbalance"),
+        persist: readNumber("persist"),
+        microprice: readNumber("microprice"),
+        ret3: readNumber("ret3"),
+        ret10: readNumber("ret10"),
+        takerFlow: readNumber("takerFlow"),
+        spreadBps: readNumber("spreadBps"),
+        shortVol: readNumber("shortVol"),
+        thinDepth: readNumber("thinDepth"),
+        wImbalance: readNumber("wImbalance"),
+        wPersist: readNumber("wPersist"),
+        wMicro: readNumber("wMicro"),
+        wRet3: readNumber("wRet3"),
+        wRet10: readNumber("wRet10"),
+        wFlow: readNumber("wFlow"),
+        wGate: readNumber("wGate"),
+        wLowVolMomentum: readNumber("wLowVolMomentum"),
+        lowVolCutoff: readNumber("lowVolCutoff"),
+        highVolCutoff: readNumber("highVolCutoff"),
+        baseConfidence: readNumber("baseConfidence"),
+        confImbalance: readNumber("confImbalance"),
+        confPersist: readNumber("confPersist"),
+        confReturn: readNumber("confReturn"),
+        confFlow: readNumber("confFlow"),
+        confThinPenalty: readNumber("confThinPenalty"),
+        confSpreadPenalty: readNumber("confSpreadPenalty"),
+        confVolPenalty: readNumber("confVolPenalty"),
+        confGateBoost: readNumber("confGateBoost")
+      };
+    }
+
+    function deriveModel(inputs) {
+      const featureVector = {
+        ...latestFeatureVector,
+        imb_top5_notional: Number.isFinite(latestFeatureVector.imb_top5_notional) ? latestFeatureVector.imb_top5_notional : inputs.imbalance,
+        microprice_dev_bps: Number.isFinite(latestFeatureVector.microprice_dev_bps) ? latestFeatureVector.microprice_dev_bps : inputs.microprice,
+        spread_bps: Number.isFinite(latestFeatureVector.spread_bps) ? latestFeatureVector.spread_bps : inputs.spreadBps,
+        vol_10s_bps: Number.isFinite(latestFeatureVector.vol_10s_bps) ? latestFeatureVector.vol_10s_bps : inputs.shortVol,
+        thin_depth: Number.isFinite(latestFeatureVector.thin_depth) ? latestFeatureVector.thin_depth : inputs.thinDepth,
+        ret_abs_3s: Number.isFinite(latestFeatureVector.ret_abs_3s) ? latestFeatureVector.ret_abs_3s : Math.abs(inputs.ret3),
+        ret_abs_10s: Number.isFinite(latestFeatureVector.ret_abs_10s) ? latestFeatureVector.ret_abs_10s : Math.abs(inputs.ret10)
+      };
+      const rawProbability = fittedProbabilityFromFeatures(featureVector);
+      const rawScore = Math.log(rawProbability / Math.max(1e-9, 1 - rawProbability));
+      const contributions = fittedMidModel.features.map((key, idx) => {
+        const raw = Number(featureVector[key] ?? 0);
+        const z = (raw - fittedMidModel.means[idx]) / Math.max(fittedMidModel.scales[idx], 1e-9);
+        return { key, value: raw, contribution: fittedMidModel.coef[idx] * z };
+      });
+      const absImbalance = Math.abs(featureVector.imb_top5_notional);
+      const gatePassed = absImbalance >= inputs.imbalanceThreshold && Math.abs(featureVector.signed_persist_05) >= inputs.persistGate;
+      const gateStrength = clamp(absImbalance / Math.max(inputs.imbalanceThreshold, 0.0001), 0, 1) * clamp(Math.abs(featureVector.signed_persist_05) / Math.max(inputs.persistGate, 0.0001), 0, 1);
+      const shrunk = rawProbability;
+      const maxProb = inputs.maxProb / 100;
+      let favoredSide = shrunk > 0.5 ? "UP" : (shrunk < 0.5 ? "DOWN" : "Neutral");
+      let regimeLabel = "Neutral";
+      let regimeNote = "Fitted model is close to neutral, so the quote stays near even.";
+      let regimeDriver = "Fitted logistic mid";
+      let regimeDriverNote = `Live probability is coming from the fitted 30s model. Current expected trade-time directional accuracy from backtest is about ${formatNum(fittedMidModel.accuracyTradeWeightedPct, 2)}%.`;
+      const gateActive = gatePassed;
+      if (shrunk >= 0.58) {
+        regimeLabel = "Strong Up Pressure";
+        regimeNote = "The fitted mid is materially above 50%, with the book and short return state favoring UP.";
+      } else if (shrunk <= 0.42) {
+        regimeLabel = "Strong Down Pressure";
+        regimeNote = "The fitted mid is materially below 50%, with the book and short return state favoring DOWN.";
+      } else if (shrunk >= 0.53) {
+        regimeLabel = "Mild Up Pressure";
+        regimeNote = "The fitted mid leans UP, but the estimated edge is not in the strongest state.";
+      } else if (shrunk <= 0.47) {
+        regimeLabel = "Mild Down Pressure";
+        regimeNote = "The fitted mid leans DOWN, but the estimated edge is not in the strongest state.";
+      }
+
+      const targetProbability = clamp(shrunk, 0.5 - (maxProb - 0.5), 0.5 + (maxProb - 0.5));
+      const now = Date.now();
+      const windowMs = quoteWindowMs(inputs);
+      const windowStartTs = Math.floor(now / windowMs) * windowMs;
+      if (quoteState.windowStartTs !== windowStartTs) {
+        const dtSeconds = quoteState.lastUpdateTs == null ? windowMs / 1000 : clamp((windowStartTs - quoteState.lastUpdateTs) / 1000, 0.25, 10);
+        const alpha = clamp(dtSeconds / 6, runtimeCalibration.alphaMin ?? 0.05, runtimeCalibration.alphaMax ?? 0.18);
+        const candidateProbability = quoteState.displayProbability + alpha * (targetProbability - quoteState.displayProbability);
+        const maxStep = (runtimeCalibration.maxStepPerSecond ?? 0.006) * dtSeconds;
+        const displayProbability = clamp(
+          quoteState.displayProbability + clamp(candidateProbability - quoteState.displayProbability, -maxStep, maxStep),
+          0.5 - (maxProb - 0.5),
+          0.5 + (maxProb - 0.5)
+        );
+        quoteState.displayProbability = Math.abs(displayProbability - 0.5) < (runtimeCalibration.neutralSnapBand ?? 0.0015) ? 0.5 : displayProbability;
+        quoteState.lastUpdateTs = windowStartTs;
+        quoteState.windowStartTs = windowStartTs;
+      }
+      favoredSide = quoteState.displayProbability > 0.5005 ? "UP" : (quoteState.displayProbability < 0.4995 ? "DOWN" : "Neutral");
+
+      const upPayout = payoutForProbability(quoteState.displayProbability, inputs.edge);
+      const downPayout = payoutForProbability(1 - quoteState.displayProbability, inputs.edge);
+
+      return {
+        contributions,
+        rawScore,
+        rawProbability,
+        confidence: clamp(Math.abs(shrunk - 0.5) / 0.1, 0, 1),
+        rawDisplayProbability: rawProbability,
+        displayProbability: quoteState.displayProbability,
+        upPayout,
+        downPayout,
+        netKeep: inputs.edge - inputs.pfof,
+        favoredSide,
+        gateActive,
+        gateStrength,
+        regimeLabel,
+        regimeNote,
+        regimeDriver,
+        regimeDriverNote,
+        quoteTimestampMs: quoteState.windowStartTs ?? Math.floor(now / windowMs) * windowMs,
+        quoteWindowSeconds: windowMs / 1000
+      };
+    }
+
+    function formatPct(value, decimals = 2) {
+      return `${value.toFixed(decimals)}%`;
+    }
+
+    function formatNum(value, decimals = 2) {
+      return Number(value).toFixed(decimals);
+    }
+
+    function normalizeStreamScalar(value) {
+      if (value == null) return "";
+      return String(value).trim().toUpperCase();
+    }
+
+    function extractNumber(value) {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (typeof value === "string") {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+      return null;
+    }
+
+    function pickFirstNumber(object, keys) {
+      for (const key of keys) {
+        if (Object.prototype.hasOwnProperty.call(object, key)) {
+          const number = extractNumber(object[key]);
+          if (number != null) return number;
+        }
+      }
+      return null;
+    }
+
+    function parseMaybeJson(value) {
+      if (typeof value !== "string") return value;
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+
+    function extractSidePayouts(object) {
+      const directUp = pickFirstNumber(object, ["up_payout", "upPayout", "up_return_rate", "upReturnRate", "upOdds", "risePayout", "bullPayout", "yesPayout"]);
+      const directDown = pickFirstNumber(object, ["down_payout", "downPayout", "down_return_rate", "downReturnRate", "downOdds", "fallPayout", "bearPayout", "noPayout"]);
+      if (directUp != null && directDown != null) {
+        return { up: directUp, down: directDown };
+      }
+
+      const sideCollection = object.quotes || object.items || object.sides || object.data || object.odds;
+      if (Array.isArray(sideCollection)) {
+        let up = null;
+        let down = null;
+        for (const item of sideCollection) {
+          if (!item || typeof item !== "object") continue;
+          const side = normalizeStreamScalar(item.side || item.direction || item.option || item.name || item.label);
+          const payout = pickFirstNumber(item, ["payout", "return_rate", "returnRate", "odds", "quote"]);
+          if (payout == null) continue;
+          if (["UP", "RISE", "BULL", "YES", "CALL"].includes(side)) up = payout;
+          if (["DOWN", "FALL", "BEAR", "NO", "PUT"].includes(side)) down = payout;
+        }
+        if (up != null && down != null) {
+          return { up, down };
+        }
+      }
+      return null;
+    }
+
+    function objectLooksLikeBtc30(object, ancestryText = "") {
+      const scalarText = Object.values(object)
+        .filter((value) => ["string", "number"].includes(typeof value))
+        .map((value) => String(value).toUpperCase())
+        .join(" ");
+      const text = `${ancestryText} ${scalarText}`.toUpperCase();
+      const mentionsBtc = text.includes("BTC/USDT") || text.includes("BTCUSDT") || text.includes("BTC-USDT");
+      const mentionsThirty = text.includes(" 30 ") || text.includes("30S") || text.includes("30 S") || text.includes("DURATION\":30") || text.includes("TENOR\":30");
+      return mentionsBtc && mentionsThirty;
+    }
+
+    function findPlatformBtc30Quote(payload, ancestryText = "") {
+      if (payload == null) return null;
+      if (Array.isArray(payload)) {
+        for (const item of payload) {
+          const found = findPlatformBtc30Quote(item, ancestryText);
+          if (found) return found;
+        }
+        return null;
+      }
+      if (typeof payload !== "object") return null;
+
+      const currentAncestry = `${ancestryText} ${Object.keys(payload).join(" ")}`.trim().toUpperCase();
+      const sidePayouts = extractSidePayouts(payload);
+      if (sidePayouts && objectLooksLikeBtc30(payload, currentAncestry)) {
+        return {
+          upPayout: sidePayouts.up,
+          downPayout: sidePayouts.down,
+          timestamp: payload.ts || payload.timestamp || payload.time || payload.updated_at || payload.updatedAt || payload.server_time || null,
+          raw: payload
+        };
+      }
+
+      for (const value of Object.values(payload)) {
+        const found = findPlatformBtc30Quote(value, currentAncestry);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    function normalizePredictConfigPayload(payload) {
+      const raw = typeof payload === "string" ? parseMaybeJson(payload) : payload;
+      const top = raw?.errno && raw?.data ? raw.data : raw;
+
+      if (Array.isArray(top?.data)) {
+        return { pairs: top.data, oracle: top.oracle_cfg ?? null };
+      }
+
+      if (Array.isArray(top?.pair_configs)) {
+        return { pairs: top.pair_configs, oracle: top.global_configs ?? null };
+      }
+
+      if (Array.isArray(top?.pairs)) {
+        return { pairs: top.pairs, oracle: top.oracle_cfg ?? null };
+      }
+
+      return { pairs: [], oracle: null };
+    }
+
+    function extractBtc30FromConfigPayload(payload) {
+      const normalized = normalizePredictConfigPayload(payload);
+      const btc = normalized.pairs.find((item) => String(item?.pair_name || item?.pairName || "").toUpperCase() === "BTC/USDT");
+      const config30 = btc?.order_configs?.find((item) => Number(item?.duration ?? item?.order_duration) === 30)
+        || btc?.orderConfigs?.find((item) => Number(item?.duration ?? item?.order_duration) === 30);
+      if (!btc || !config30) return null;
+      return {
+        upPayout: Number(config30.bid_return_rate) * 100,
+        downPayout: Number(config30.ask_return_rate) * 100,
+        timestamp: `config ${new Date().toLocaleTimeString()}`,
+        raw: config30
+      };
+    }
+
+    function renderPublicTradeMonitor() {
+      const chip = $("trade-stream-chip");
+      const statusMap = {
+        connected: { text: "Live", cls: "up" },
+        connecting: { text: "Booting", cls: "neutral" },
+        offline: { text: "Offline", cls: "neutral" },
+        error: { text: "Error", cls: "down" }
+      };
+      const status = statusMap[publicTradeMonitor.status] || statusMap.offline;
+      chip.textContent = status.text;
+      chip.className = `state-chip ${status.cls}`;
+
+      $("trade-stream-status").textContent = status.text;
+      $("trade-stream-note").textContent = publicTradeMonitor.lastTradeTs
+        ? `Last BTC 30s trade seen at ${new Date(publicTradeMonitor.lastTradeTs).toLocaleTimeString()}.`
+        : "Waiting for public market trades.";
+      $("stream-our-pnl").textContent = formatNum(publicTradeMonitor.ourPnl, 2);
+      $("stream-our-pnl-note").textContent = "Computed from public Turboflow trade messages, not DB polling.";
+      $("stream-competed-trades").textContent = String(publicTradeMonitor.competedTrades);
+      $("stream-competed-note").textContent = `${publicTradeMonitor.routedById.size} routed trades are still open / unsettled.`;
+      $("stream-settled-trades").textContent = String(publicTradeMonitor.settledTrades);
+      $("stream-wins-inline").textContent = String(publicTradeMonitor.wins);
+      $("stream-losses-inline").textContent = String(publicTradeMonitor.losses);
+      $("stream-competed-volume").textContent = formatNum(publicTradeMonitor.competedVolume, 2);
+      $("stream-seen-trades").textContent = String(publicTradeMonitor.seenTrades);
+    }
+
+    function tradeSideLabel(side) {
+      if (Number(side) === 1) return "UP";
+      if (Number(side) === 2) return "DOWN";
+      return "UNKNOWN";
+    }
+
+    function computeUserWonFromTrade(trade) {
+      const side = Number(trade.side);
+      const entry = Number(trade.entry_price);
+      const settled = Number(trade.settled_price);
+      if (!Number.isFinite(entry) || !Number.isFinite(settled)) return null;
+      if (side === 1) return settled > entry;
+      if (side === 2) return settled < entry;
+      return null;
+    }
+
+    function maybeProcessPublicTradeMessage(payload) {
+      const msg = parseMaybeJson(payload);
+      if (!msg || msg.group !== "dex_predict_market") return false;
+      const trade = parseMaybeJson(msg.data);
+      if (!trade || typeof trade !== "object") return false;
+      if (String(trade.pair_id ?? "") !== "6" || Number(trade.duration) !== 30) return false;
+
+      const tradeId = String(trade.id ?? "");
+      if (!tradeId) return false;
+
+      publicTradeMonitor.status = "connected";
+      publicTradeMonitor.lastTradeTs = Date.now();
+
+      const isNewTradeSeen = !publicTradeMonitor.seenTradeIds.has(tradeId);
+      if (isNewTradeSeen) {
+        publicTradeMonitor.seenTradeIds.add(tradeId);
+        publicTradeMonitor.seenTrades += 1;
+      }
+
+      const createdAtMs = Date.parse(trade.created_at || "");
+      const quote = Number.isFinite(createdAtMs) ? quoteForTradeTimestamp(createdAtMs) : null;
+      const actualPayout = Number(trade.return_rate) * 100;
+      const side = tradeSideLabel(trade.side);
+      const ourPayout = side === "UP" ? quote?.up_payout : side === "DOWN" ? quote?.down_payout : null;
+      const amount = Number(trade.usdt_value ?? trade.amount ?? 0);
+      const statusText = String(trade.order_status || "");
+
+      if (!publicTradeMonitor.routedById.has(tradeId) && quote && Number.isFinite(actualPayout) && Number.isFinite(ourPayout) && ourPayout > actualPayout) {
+        publicTradeMonitor.routedById.set(tradeId, {
+          id: tradeId,
+          side,
+          amount,
+          ourPayout,
+          actualPayout,
+          createdAtMs,
+          settled: false
+        });
+        publicTradeMonitor.competedTrades += 1;
+        publicTradeMonitor.competedVolume += amount;
+      }
+
+      const routed = publicTradeMonitor.routedById.get(tradeId);
+      if (routed && !routed.settled && statusText === "Finished") {
+        const userWon = computeUserWonFromTrade(trade);
+        if (userWon === true) {
+          publicTradeMonitor.ourPnl += -(routed.amount * routed.ourPayout / 100);
+          publicTradeMonitor.losses += 1;
+        } else if (userWon === false) {
+          publicTradeMonitor.ourPnl += routed.amount;
+          publicTradeMonitor.wins += 1;
+        }
+        routed.settled = true;
+        publicTradeMonitor.settledTrades += 1;
+      }
+
+      renderPublicTradeMonitor();
+      return true;
+    }
+
+    function renderPlatformStreamState(model = null) {
+      const badge = $("platform-stream-badge");
+      const raw = $("platform-raw");
+      const quote = platformStreamState.lastQuote;
+      const statusMap = {
+        connected: { text: "Connected", cls: "live" },
+        connecting: { text: "Connecting", cls: "manual" },
+        error: { text: "Error", cls: "manual" },
+        disconnected: { text: "Disconnected", cls: "manual" }
+      };
+      const status = statusMap[platformStreamState.status] || statusMap.disconnected;
+      badge.textContent = status.text;
+      badge.className = `feed-badge ${status.cls}`;
+
+      $("platform-stream-time").textContent = platformStreamState.lastMessageTs
+        ? new Date(platformStreamState.lastMessageTs).toLocaleTimeString()
+        : "No message yet";
+      $("platform-stream-note").textContent = quote
+        ? (platformStreamState.source === "config"
+          ? "Loaded BTC 30s quote from the public config endpoint."
+          : "Parsed a BTC 30s platform quote from the websocket stream.")
+        : (platformStreamState.status === "connected"
+          ? "Connected, but no BTC 30s quote has been recognized yet."
+          : "Waiting for a BTC 30s quote from the platform websocket.");
+
+      raw.textContent = platformStreamState.lastRawMessage
+        ? safeJsonPreview(platformStreamState.lastRawMessage)
+        : "No platform websocket payload yet.";
+
+      if (!quote) {
+        $("platform-quote-chip").textContent = "No Quote";
+        $("platform-quote-chip").className = "state-chip neutral";
+        $("platform-up-payout").textContent = "-";
+        $("platform-down-payout").textContent = "-";
+        $("platform-up-meta").textContent = "Waiting for streamed quote";
+        $("platform-down-meta").textContent = "Waiting for streamed quote";
+        $("platform-up-win").textContent = "-";
+        $("platform-down-win").textContent = "-";
+        $("platform-product").textContent = "BTC 30s";
+        $("platform-product-note").textContent = "Best-effort parser looks for BTC/USDT and 30-second quotes in the stream.";
+        $("platform-quote-time").textContent = "-";
+        $("platform-quote-note").textContent = "Live platform stream timestamp when available.";
+        $("platform-implied-edge").textContent = "-";
+        $("platform-overround").textContent = "-";
+        $("platform-up-edge").textContent = "-";
+        $("platform-down-edge").textContent = "-";
+        $("platform-up-edge-note").textContent = "Positive means our UP payout is richer than the platform quote.";
+        $("platform-down-edge-note").textContent = "Positive means our DOWN payout is richer than the platform quote.";
+        return;
+      }
+
+      $("platform-up-payout").textContent = formatNum(quote.upPayout);
+      $("platform-down-payout").textContent = formatNum(quote.downPayout);
+      $("platform-product").textContent = platformStreamState.source === "config" ? "BTC/USDT 30s (ask/bid)" : "BTC/USDT 30s";
+      $("platform-product-note").textContent = platformStreamState.source === "config"
+        ? "Loaded from public config. Using ask_return_rate and bid_return_rate for the 30s BTC product."
+        : "Parsed directly from the platform websocket stream.";
+      $("platform-quote-time").textContent = quote.timestamp ? String(quote.timestamp) : "Seen just now";
+      $("platform-quote-note").textContent = "Use this against our quote to see which side of flow we would win.";
+      const impliedQuoteMetrics = impliedEdgeFromTwoWayQuote(quote.upPayout, quote.downPayout);
+      $("platform-implied-edge").textContent = impliedQuoteMetrics.impliedEdgePct == null ? "-" : formatPct(impliedQuoteMetrics.impliedEdgePct, 2);
+      $("platform-overround").textContent = impliedQuoteMetrics.overroundPct == null ? "-" : formatPct(impliedQuoteMetrics.overroundPct, 2);
+
+      if (model) {
+        const upEdge = model.upPayout - quote.upPayout;
+        const downEdge = model.downPayout - quote.downPayout;
+        $("platform-up-edge").textContent = `${upEdge >= 0 ? "+" : ""}${formatNum(upEdge)}`;
+        $("platform-down-edge").textContent = `${downEdge >= 0 ? "+" : ""}${formatNum(downEdge)}`;
+        $("platform-up-win").textContent = upEdge > 0 ? "We win" : upEdge < 0 ? "They win" : "Tie";
+        $("platform-down-win").textContent = downEdge > 0 ? "We win" : downEdge < 0 ? "They win" : "Tie";
+        $("platform-up-meta").textContent = upEdge > 0 ? "Our UP payout is richer than theirs." : upEdge < 0 ? "Platform UP payout is richer." : "Exact same UP payout.";
+        $("platform-down-meta").textContent = downEdge > 0 ? "Our DOWN payout is richer than theirs." : downEdge < 0 ? "Platform DOWN payout is richer." : "Exact same DOWN payout.";
+        const chipText = upEdge > 0 || downEdge > 0 ? "Competing" : "Watching";
+        const chipClass = upEdge > 0 || downEdge > 0 ? "up" : "neutral";
+        $("platform-quote-chip").textContent = chipText;
+        $("platform-quote-chip").className = `state-chip ${chipClass}`;
+      }
+    }
+
+    function disconnectPlatformStream() {
+      if (platformSocket) {
+        platformSocket.onopen = null;
+        platformSocket.onmessage = null;
+        platformSocket.onerror = null;
+        platformSocket.onclose = null;
+        try {
+          platformSocket.close();
+        } catch (error) {
+          console.error(error);
+        }
+        platformSocket = null;
+      }
+      if (platformConfigPollHandle) {
+        clearInterval(platformConfigPollHandle);
+        platformConfigPollHandle = null;
+      }
+      platformStreamState.status = "disconnected";
+      platformStreamState.lastQuote = null;
+      platformStreamState.source = "none";
+      publicTradeMonitor.status = "offline";
+      $("platform-stream-toggle").textContent = "Connect Stream";
+      renderPlatformStreamState();
+      renderPublicTradeMonitor();
+    }
+
+    async function loadPlatformConfigQuote() {
+      const response = await fetch("https://apis.turboflow.xyz/public/pm/config?version=2", { cache: "no-store" });
+      const payload = await response.json();
+      platformStreamState.lastRawMessage = payload;
+      platformStreamState.lastMessageTs = Date.now();
+      const quote = extractBtc30FromConfigPayload(payload);
+      if (!quote) {
+        renderPlatformStreamState();
+        return;
+      }
+      platformStreamState.lastQuote = quote;
+      platformStreamState.source = "config";
+      renderPlatformStreamState(lastRenderedModel);
+    }
+
+    function startPlatformConfigPolling() {
+      if (platformConfigPollHandle) clearInterval(platformConfigPollHandle);
+      loadPlatformConfigQuote().catch((error) => {
+        platformStreamState.lastRawMessage = { error: String(error), source: "config" };
+        renderPlatformStreamState();
+      });
+      platformConfigPollHandle = setInterval(() => {
+        loadPlatformConfigQuote().catch((error) => {
+          platformStreamState.lastRawMessage = { error: String(error), source: "config" };
+          renderPlatformStreamState();
+        });
+      }, 2000);
+    }
+
+    function connectPlatformStream() {
+      const host = $("platformHost").value.trim();
+      const path = $("platformPath").value.trim() || "/ws/vendor/predict-quotes";
+      if (!host) {
+        platformStreamState.status = "error";
+        platformStreamState.lastRawMessage = { error: "Enter prod_api_host first" };
+        renderPlatformStreamState();
+        return;
+      }
+
+      disconnectPlatformStream();
+      platformStreamState.status = "connecting";
+      publicTradeMonitor.status = "connecting";
+      platformStreamState.lastRawMessage = null;
+      platformStreamState.lastMessageTs = null;
+      $("platform-stream-toggle").textContent = "Disconnect Stream";
+      renderPlatformStreamState();
+      renderPublicTradeMonitor();
+      const url = host.startsWith("ws://") || host.startsWith("wss://")
+        ? host
+        : `wss://${host}${path.startsWith("/") ? path : `/${path}`}`;
+
+      try {
+        platformSocket = new WebSocket(url);
+      } catch (error) {
+        platformStreamState.status = "error";
+        platformStreamState.lastRawMessage = { error: String(error), url };
+        renderPlatformStreamState();
+        return;
+      }
+
+      localStorage.setItem("predictQuotesHost", host);
+      localStorage.setItem("predictQuotesPath", path);
+
+      platformSocket.onopen = () => {
+        platformStreamState.status = "connected";
+        platformStreamState.lastRawMessage = { connected: true, url };
+        platformStreamState.source = "websocket";
+        publicTradeMonitor.status = "connected";
+        platformSocket.send(JSON.stringify({ action: "subscribe", args: ["dex_predict_config"] }));
+        platformSocket.send(JSON.stringify({ action: "subscribe", args: ["dex_predict_ticker"] }));
+        platformSocket.send(JSON.stringify({ action: "subscribe", args: ["dex_predict_market"] }));
+        renderPlatformStreamState();
+        renderPublicTradeMonitor();
+        startPlatformConfigPolling();
+      };
+
+      platformSocket.onmessage = (event) => {
+        platformStreamState.lastMessageTs = Date.now();
+        let payload = event.data;
+        try {
+          payload = JSON.parse(event.data);
+        } catch (error) {
+          // keep raw string
+        }
+        if (maybeProcessPublicTradeMessage(payload)) {
+          renderPublicTradeMonitor();
+          return;
+        }
+        if (payload?.group === "dex_predict_config") {
+          platformStreamState.lastRawMessage = payload;
+          const quoteFromConfig = extractBtc30FromConfigPayload(payload.data ?? payload);
+          if (quoteFromConfig) {
+            platformStreamState.lastQuote = quoteFromConfig;
+            platformStreamState.source = "websocket";
+          }
+          renderPlatformStreamState(lastRenderedModel);
+          return;
+        }
+        const parsedQuote = findPlatformBtc30Quote(payload);
+        if (parsedQuote) {
+          platformStreamState.lastRawMessage = payload;
+        }
+        if (parsedQuote) {
+          platformStreamState.lastQuote = parsedQuote;
+          platformStreamState.source = "websocket";
+        }
+        renderPlatformStreamState(lastRenderedModel);
+      };
+
+      platformSocket.onerror = () => {
+        platformStreamState.status = "error";
+        publicTradeMonitor.status = "error";
+        renderPlatformStreamState();
+        renderPublicTradeMonitor();
+      };
+
+      platformSocket.onclose = () => {
+        if (platformStreamState.status !== "error") {
+          platformStreamState.status = "disconnected";
+        }
+        if (publicTradeMonitor.status !== "error") {
+          publicTradeMonitor.status = "offline";
+        }
+        $("platform-stream-toggle").textContent = "Connect Stream";
+        renderPlatformStreamState();
+        renderPublicTradeMonitor();
+      };
+    }
+
+    function togglePlatformStream() {
+      if (platformSocket && platformSocket.readyState <= 1) {
+        disconnectPlatformStream();
+        return;
+      }
+      connectPlatformStream();
+    }
+
+    function updateContributionTable(contributions) {
+      const tbody = $("contrib-body");
+      tbody.innerHTML = "";
+      const maxAbs = Math.max(0.01, ...contributions.map((item) => Math.abs(item.contribution)));
+
+      for (const row of contributions) {
+        const tr = document.createElement("tr");
+        const width = `${Math.min(50, Math.abs(row.contribution) / maxAbs * 50)}%`;
+        const directionClass = row.contribution >= 0 ? "pos" : "neg";
+        tr.innerHTML = `
+          <td>${row.key}</td>
+          <td>${formatNum(row.value, 2)}</td>
+          <td>
+            <div class="contribution">
+              <span>${formatNum(row.contribution, 3)}</span>
+              <div class="bar"><span class="${directionClass}" style="width:${width}"></span></div>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function updateLadder(edge, pfof) {
+      const tbody = $("ladder-body");
+      tbody.innerHTML = "";
+      const probabilities = [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 62, 65];
+
+      for (const p of probabilities) {
+        const favored = p / 100;
+        const other = 1 - favored;
+        const favoredPayout = payoutForProbability(favored, edge);
+        const otherPayout = payoutForProbability(other, edge);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${formatPct(p, 1)}</td>
+          <td>${formatNum(favoredPayout)}</td>
+          <td>${formatNum(otherPayout)}</td>
+          <td>$${formatNum(edge, 2)}</td>
+          <td>${formatPct(edge - pfof, 2)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function render() {
+      const inputs = currentInputs();
+      const model = deriveModel(inputs);
+
+      $("imbalance-value").textContent = formatNum(inputs.imbalance, 2);
+      $("hero-edge").textContent = formatPct(inputs.edge, 2);
+      $("hero-backtest").textContent = `Top ${runtimeCalibration.depth || 5} / ${formatNum(inputs.imbalanceThreshold, 2)} / ${formatNum(inputs.persistGate, 1)}s`;
+      $("hero-pfof").textContent = formatPct(inputs.pfof, 2);
+      $("hero-triggered-p").textContent = formatPct((runtimeCalibration.triggeredProbability || 0.5924) * 100, 2);
+      $("hero-neutral").textContent = `${formatNum(payoutForProbability(0.5, inputs.edge))} / ${formatNum(payoutForProbability(0.5, inputs.edge))}`;
+      $("hero-net").textContent = formatPct(inputs.edge - inputs.pfof, 2);
+
+      $("formula-text").textContent =
+`gross_multiplier = 1 - edge
+favored_payout = 100 * gross_multiplier / p - 100
+other_payout   = 100 * gross_multiplier / (1 - p) - 100
+
+neutral(p = 0.50, edge = ${formatNum(inputs.edge, 2)}%) -> ${formatNum(payoutForProbability(0.5, inputs.edge))} / ${formatNum(payoutForProbability(0.5, inputs.edge))}`;
+
+      $("up-prob").textContent = formatPct(model.displayProbability * 100, 2);
+      $("down-prob").textContent = formatPct((1 - model.displayProbability) * 100, 2);
+      $("up-payout").textContent = formatNum(model.upPayout);
+      $("down-payout").textContent = formatNum(model.downPayout);
+      $("up-meta").textContent = model.favoredSide === "UP" ? "Favored side under current signal" : "Contra / less favored side";
+      $("down-meta").textContent = model.favoredSide === "DOWN" ? "Favored side under current signal" : "Contra / less favored side";
+
+      $("raw-score").textContent = formatNum(model.rawScore, 3);
+      $("raw-prob").textContent = formatPct(model.rawProbability * 100, 2);
+      $("confidence").textContent = formatPct(model.confidence * 100, 1);
+      $("display-prob").textContent = formatPct(model.displayProbability * 100, 2);
+      $("vol-regime").textContent = model.regimeLabel;
+      $("vol-regime-note").textContent = model.regimeNote;
+      $("gate-state").textContent = model.gateActive ? "Yes" : "No";
+      $("gate-note").textContent = model.gateActive
+        ? `Backtest gate is active. Strength ${formatNum(model.gateStrength, 2)}.`
+        : "Backtest gate is inactive. Quote is mostly being shrunk toward neutral.";
+      $("regime-driver").textContent = model.regimeDriver;
+      $("regime-driver-note").textContent = model.regimeDriverNote;
+      $("gross-edge").textContent = formatPct(inputs.edge, 2);
+      $("net-keep").textContent = formatPct(model.netKeep, 2);
+
+      const chip = $("state-chip");
+      chip.textContent = model.favoredSide;
+      chip.className = `state-chip ${model.favoredSide === "UP" ? "up" : model.favoredSide === "DOWN" ? "down" : "neutral"}`;
+
+      updateContributionTable(model.contributions);
+      updateLadder(inputs.edge, inputs.pfof);
+      renderPlatformStreamState(model);
+      renderPublicTradeMonitor();
+      trackLocalQuote(model);
+      lastRenderedModel = model;
+
+      return { inputs, model };
+    }
+
+    function appendTapeRow() {
+      const { inputs, model } = render();
+      const tbody = $("tape-body");
+      const row = document.createElement("tr");
+      const now = new Date();
+      row.innerHTML = `
+        <td>${now.toLocaleTimeString()}</td>
+        <td>${model.favoredSide}</td>
+        <td>${formatPct(model.displayProbability * 100, 2)}</td>
+        <td>${formatNum(model.upPayout)}</td>
+        <td>${formatNum(model.downPayout)}</td>
+        <td>${formatPct(inputs.edge - inputs.pfof, 2)}</td>
+      `;
+      tbody.prepend(row);
+      while (tbody.children.length > 18) {
+        tbody.removeChild(tbody.lastChild);
+      }
+    }
+
+    function toggleStream() {
+      const button = $("stream-toggle");
+      if (streamHandle) {
+        window.clearInterval(streamHandle);
+        streamHandle = null;
+        button.textContent = "Start 2s Stream";
+        return;
+      }
+
+      appendTapeRow();
+      const cadenceMs = Math.max(1, readNumber("cadence")) * 1000;
+      streamHandle = window.setInterval(() => {
+        streamTick += 1;
+        appendTapeRow();
+      }, cadenceMs);
+      button.textContent = "Pause Stream";
+    }
+
+    function applyPreset(name) {
+      const preset = presets[name];
+      if (!preset) return;
+      for (const [key, value] of Object.entries(preset)) {
+        const element = $(key);
+        if (element) {
+          element.value = value;
+        }
+      }
+      quoteState.windowStartTs = null;
+      quoteState.lastUpdateTs = null;
+      render();
+    }
+
+    function setMode(mode) {
+      const basic = mode === "basic";
+      document.querySelectorAll(".advanced-section").forEach((section) => {
+        section.classList.toggle("hidden", basic);
+      });
+      document.querySelectorAll(".advanced-input").forEach((section) => {
+        section.classList.toggle("hidden", basic);
+      });
+      $("basic-mode-btn").classList.toggle("active", basic);
+      $("advanced-mode-btn").classList.toggle("active", !basic);
+    }
+
+    function startAutoFeed() {
+      if (autoFeedStartHandle) {
+        window.clearTimeout(autoFeedStartHandle);
+        autoFeedStartHandle = null;
+      }
+      if (autoFeedHandle) window.clearInterval(autoFeedHandle);
+      autoFeedEnabled = true;
+      const cadenceMs = quoteWindowMs();
+      const now = Date.now();
+      const nextBoundary = Math.ceil(now / cadenceMs) * cadenceMs;
+      const delayMs = Math.max(0, nextBoundary - now);
+      pullLiveFeed();
+      autoFeedStartHandle = window.setTimeout(() => {
+        pullLiveFeed();
+        autoFeedHandle = window.setInterval(pullLiveFeed, cadenceMs);
+      }, delayMs);
+    }
+
+    document.querySelectorAll("input").forEach((input) => {
+      input.addEventListener("input", () => {
+        quoteState.windowStartTs = null;
+        quoteState.lastUpdateTs = null;
+        render();
+        if (autoFeedEnabled && ["cadence"].includes(input.id)) {
+          startAutoFeed();
+        }
+      });
+      input.addEventListener("change", () => {
+        quoteState.windowStartTs = null;
+        quoteState.lastUpdateTs = null;
+        render();
+        if (autoFeedEnabled && ["cadence"].includes(input.id)) {
+          startAutoFeed();
+        }
+      });
+    });
+
+    document.querySelectorAll("select").forEach((select) => {
+      select.addEventListener("change", () => {
+        quoteState.windowStartTs = null;
+        quoteState.lastUpdateTs = null;
+        render();
+      });
+    });
+
+    document.querySelectorAll("[data-preset]").forEach((button) => {
+      button.addEventListener("click", () => applyPreset(button.dataset.preset));
+    });
+
+    $("stream-toggle").addEventListener("click", toggleStream);
+    $("reset-tape").addEventListener("click", () => {
+      $("tape-body").innerHTML = "";
+      streamTick = 0;
+    });
+    $("basic-mode-btn").addEventListener("click", () => setMode("basic"));
+    $("advanced-mode-btn").addEventListener("click", () => setMode("advanced"));
+    $("calibrate-btn").addEventListener("click", calibrateFromBacktest);
+    $("platform-stream-toggle").addEventListener("click", togglePlatformStream);
+
+    const savedHost = localStorage.getItem("predictQuotesHost");
+    const savedPath = localStorage.getItem("predictQuotesPath");
+    $("platformHost").value = savedHost || "wss://apis.turboflow.xyz/realtime";
+    if (savedPath) $("platformPath").value = savedPath;
+
+    setMode("basic");
+    applyCalibration(fallbackCalibration, "Embedded last 7d winner");
+    render();
+    startAutoFeed();
+    startPlatformConfigPolling();
+    connectPlatformStream();
+    calibrateFromBacktest();
+  </script>
+</body>
+</html>

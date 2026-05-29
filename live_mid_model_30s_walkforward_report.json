@@ -1,0 +1,451 @@
+{
+  "source_csv": "live_mid_model_30s_v1_trade_eval.csv",
+  "rows": 70621,
+  "days": [
+    "2026-05-20",
+    "2026-05-21",
+    "2026-05-22",
+    "2026-05-23",
+    "2026-05-25",
+    "2026-05-26",
+    "2026-05-27"
+  ],
+  "feature_groups": {
+    "skew": [
+      "imb_top5_notional",
+      "imb_top5_size",
+      "imb_top10_notional",
+      "imb_top10_size",
+      "signed_persist_05",
+      "signed_persist_06",
+      "microprice_dev_bps"
+    ],
+    "momentum": [
+      "ret_3s_bps",
+      "ret_10s_bps"
+    ],
+    "vol": [
+      "spread_bps",
+      "vol_10s_bps",
+      "thin_depth",
+      "ret_abs_3s",
+      "ret_abs_10s"
+    ],
+    "mean_reversion": [
+      "mr_gap_bps",
+      "mr_snap_bps"
+    ],
+    "confirmation": [
+      "book_momo_agree",
+      "book_micro_agree",
+      "persist_agree_05"
+    ]
+  },
+  "feature_set_results": {
+    "skew_only": {
+      "features": [
+        "imb_top5_notional",
+        "imb_top5_size",
+        "imb_top10_notional",
+        "imb_top10_size",
+        "signed_persist_05",
+        "signed_persist_06",
+        "microprice_dev_bps"
+      ],
+      "splits": [
+        {
+          "n_rows": 12838,
+          "trade_count": 14678,
+          "accuracy_pct": 55.36,
+          "accuracy_trade_weighted_pct": 55.52,
+          "brier": 0.24487,
+          "logloss": 0.68282,
+          "avg_pred": 0.50748,
+          "actual_up_rate": 0.49579,
+          "split": "21->22"
+        },
+        {
+          "n_rows": 14460,
+          "trade_count": 17984,
+          "accuracy_pct": 56.62,
+          "accuracy_trade_weighted_pct": 56.78,
+          "brier": 0.2433,
+          "logloss": 0.68009,
+          "avg_pred": 0.49626,
+          "actual_up_rate": 0.50028,
+          "split": "21-22->25"
+        },
+        {
+          "n_rows": 18514,
+          "trade_count": 22138,
+          "accuracy_pct": 54.38,
+          "accuracy_trade_weighted_pct": 54.24,
+          "brier": 0.24659,
+          "logloss": 0.6863,
+          "avg_pred": 0.50319,
+          "actual_up_rate": 0.49968,
+          "split": "21-25->26"
+        }
+      ],
+      "mean_accuracy_trade_weighted_pct": 55.51,
+      "mean_logloss": 0.68307,
+      "mean_brier": 0.24492
+    },
+    "skew_plus_momentum": {
+      "features": [
+        "imb_top5_notional",
+        "imb_top5_size",
+        "imb_top10_notional",
+        "imb_top10_size",
+        "signed_persist_05",
+        "signed_persist_06",
+        "microprice_dev_bps",
+        "ret_3s_bps",
+        "ret_10s_bps"
+      ],
+      "splits": [
+        {
+          "n_rows": 12838,
+          "trade_count": 14678,
+          "accuracy_pct": 55.43,
+          "accuracy_trade_weighted_pct": 55.63,
+          "brier": 0.24503,
+          "logloss": 0.68315,
+          "avg_pred": 0.50761,
+          "actual_up_rate": 0.49579,
+          "split": "21->22"
+        },
+        {
+          "n_rows": 14460,
+          "trade_count": 17984,
+          "accuracy_pct": 56.63,
+          "accuracy_trade_weighted_pct": 56.79,
+          "brier": 0.24318,
+          "logloss": 0.67984,
+          "avg_pred": 0.49626,
+          "actual_up_rate": 0.50028,
+          "split": "21-22->25"
+        },
+        {
+          "n_rows": 18514,
+          "trade_count": 22138,
+          "accuracy_pct": 54.56,
+          "accuracy_trade_weighted_pct": 54.44,
+          "brier": 0.2464,
+          "logloss": 0.6859,
+          "avg_pred": 0.50329,
+          "actual_up_rate": 0.49968,
+          "split": "21-25->26"
+        }
+      ],
+      "mean_accuracy_trade_weighted_pct": 55.62,
+      "mean_logloss": 0.68296,
+      "mean_brier": 0.24487
+    },
+    "skew_plus_vol": {
+      "features": [
+        "imb_top5_notional",
+        "imb_top5_size",
+        "imb_top10_notional",
+        "imb_top10_size",
+        "signed_persist_05",
+        "signed_persist_06",
+        "microprice_dev_bps",
+        "spread_bps",
+        "vol_10s_bps",
+        "thin_depth",
+        "ret_abs_3s",
+        "ret_abs_10s"
+      ],
+      "splits": [
+        {
+          "n_rows": 12838,
+          "trade_count": 14678,
+          "accuracy_pct": 55.48,
+          "accuracy_trade_weighted_pct": 55.68,
+          "brier": 0.24503,
+          "logloss": 0.68345,
+          "avg_pred": 0.50785,
+          "actual_up_rate": 0.49579,
+          "split": "21->22"
+        },
+        {
+          "n_rows": 14460,
+          "trade_count": 17984,
+          "accuracy_pct": 56.81,
+          "accuracy_trade_weighted_pct": 56.94,
+          "brier": 0.24306,
+          "logloss": 0.67949,
+          "avg_pred": 0.49593,
+          "actual_up_rate": 0.50028,
+          "split": "21-22->25"
+        },
+        {
+          "n_rows": 18514,
+          "trade_count": 22138,
+          "accuracy_pct": 54.52,
+          "accuracy_trade_weighted_pct": 54.37,
+          "brier": 0.24681,
+          "logloss": 0.68784,
+          "avg_pred": 0.50306,
+          "actual_up_rate": 0.49968,
+          "split": "21-25->26"
+        }
+      ],
+      "mean_accuracy_trade_weighted_pct": 55.66,
+      "mean_logloss": 0.68359,
+      "mean_brier": 0.24497
+    },
+    "skew_plus_mean_reversion": {
+      "features": [
+        "imb_top5_notional",
+        "imb_top5_size",
+        "imb_top10_notional",
+        "imb_top10_size",
+        "signed_persist_05",
+        "signed_persist_06",
+        "microprice_dev_bps",
+        "mr_gap_bps",
+        "mr_snap_bps"
+      ],
+      "splits": [
+        {
+          "n_rows": 12838,
+          "trade_count": 14678,
+          "accuracy_pct": 55.41,
+          "accuracy_trade_weighted_pct": 55.62,
+          "brier": 0.24504,
+          "logloss": 0.68316,
+          "avg_pred": 0.50761,
+          "actual_up_rate": 0.49579,
+          "split": "21->22"
+        },
+        {
+          "n_rows": 14460,
+          "trade_count": 17984,
+          "accuracy_pct": 56.62,
+          "accuracy_trade_weighted_pct": 56.79,
+          "brier": 0.24318,
+          "logloss": 0.67984,
+          "avg_pred": 0.49626,
+          "actual_up_rate": 0.50028,
+          "split": "21-22->25"
+        },
+        {
+          "n_rows": 18514,
+          "trade_count": 22138,
+          "accuracy_pct": 54.54,
+          "accuracy_trade_weighted_pct": 54.42,
+          "brier": 0.24639,
+          "logloss": 0.68589,
+          "avg_pred": 0.50328,
+          "actual_up_rate": 0.49968,
+          "split": "21-25->26"
+        }
+      ],
+      "mean_accuracy_trade_weighted_pct": 55.61,
+      "mean_logloss": 0.68296,
+      "mean_brier": 0.24487
+    },
+    "core_no_confirmation": {
+      "features": [
+        "imb_top5_notional",
+        "imb_top5_size",
+        "imb_top10_notional",
+        "imb_top10_size",
+        "signed_persist_05",
+        "signed_persist_06",
+        "microprice_dev_bps",
+        "ret_3s_bps",
+        "ret_10s_bps",
+        "spread_bps",
+        "vol_10s_bps",
+        "thin_depth",
+        "ret_abs_3s",
+        "ret_abs_10s",
+        "mr_gap_bps",
+        "mr_snap_bps"
+      ],
+      "splits": [
+        {
+          "n_rows": 12838,
+          "trade_count": 14678,
+          "accuracy_pct": 55.34,
+          "accuracy_trade_weighted_pct": 55.49,
+          "brier": 0.24517,
+          "logloss": 0.6837,
+          "avg_pred": 0.50788,
+          "actual_up_rate": 0.49579,
+          "split": "21->22"
+        },
+        {
+          "n_rows": 14460,
+          "trade_count": 17984,
+          "accuracy_pct": 56.74,
+          "accuracy_trade_weighted_pct": 56.9,
+          "brier": 0.24294,
+          "logloss": 0.67924,
+          "avg_pred": 0.4959,
+          "actual_up_rate": 0.50028,
+          "split": "21-22->25"
+        },
+        {
+          "n_rows": 18514,
+          "trade_count": 22138,
+          "accuracy_pct": 54.52,
+          "accuracy_trade_weighted_pct": 54.43,
+          "brier": 0.24664,
+          "logloss": 0.68749,
+          "avg_pred": 0.50314,
+          "actual_up_rate": 0.49968,
+          "split": "21-25->26"
+        }
+      ],
+      "mean_accuracy_trade_weighted_pct": 55.61,
+      "mean_logloss": 0.68348,
+      "mean_brier": 0.24492
+    },
+    "core_with_confirmation": {
+      "features": [
+        "imb_top5_notional",
+        "imb_top5_size",
+        "imb_top10_notional",
+        "imb_top10_size",
+        "signed_persist_05",
+        "signed_persist_06",
+        "microprice_dev_bps",
+        "ret_3s_bps",
+        "ret_10s_bps",
+        "spread_bps",
+        "vol_10s_bps",
+        "thin_depth",
+        "ret_abs_3s",
+        "ret_abs_10s",
+        "mr_gap_bps",
+        "mr_snap_bps",
+        "book_momo_agree",
+        "book_micro_agree",
+        "persist_agree_05"
+      ],
+      "splits": [
+        {
+          "n_rows": 12838,
+          "trade_count": 14678,
+          "accuracy_pct": 55.38,
+          "accuracy_trade_weighted_pct": 55.52,
+          "brier": 0.24529,
+          "logloss": 0.6839,
+          "avg_pred": 0.50775,
+          "actual_up_rate": 0.49579,
+          "split": "21->22"
+        },
+        {
+          "n_rows": 14460,
+          "trade_count": 17984,
+          "accuracy_pct": 56.83,
+          "accuracy_trade_weighted_pct": 56.93,
+          "brier": 0.24289,
+          "logloss": 0.67911,
+          "avg_pred": 0.49633,
+          "actual_up_rate": 0.50028,
+          "split": "21-22->25"
+        },
+        {
+          "n_rows": 18514,
+          "trade_count": 22138,
+          "accuracy_pct": 54.36,
+          "accuracy_trade_weighted_pct": 54.27,
+          "brier": 0.24673,
+          "logloss": 0.68764,
+          "avg_pred": 0.50371,
+          "actual_up_rate": 0.49968,
+          "split": "21-25->26"
+        }
+      ],
+      "mean_accuracy_trade_weighted_pct": 55.57,
+      "mean_logloss": 0.68355,
+      "mean_brier": 0.24497
+    }
+  },
+  "best_feature_set": "skew_plus_vol",
+  "best_model": {
+    "features": [
+      "imb_top5_notional",
+      "imb_top5_size",
+      "imb_top10_notional",
+      "imb_top10_size",
+      "signed_persist_05",
+      "signed_persist_06",
+      "microprice_dev_bps",
+      "spread_bps",
+      "vol_10s_bps",
+      "thin_depth",
+      "ret_abs_3s",
+      "ret_abs_10s"
+    ],
+    "coefficients": {
+      "intercept": 0.0016059802166241638,
+      "coef": [
+        0.06273447354771504,
+        0.06273446959438328,
+        0.06936704189926392,
+        0.06936735774706378,
+        0.007406212979310936,
+        0.014327121653238297,
+        0.004578973922674152,
+        0.00826405707708158,
+        -0.010307167579067118,
+        0.027813790158738888,
+        0.005321690423580252,
+        0.005021981004479234
+      ],
+      "means": [
+        0.0378447340347049,
+        0.037845244667215124,
+        0.038036388610729874,
+        0.038037293808164695,
+        0.4153580379773722,
+        0.326163605726342,
+        0.00024013008734844412,
+        0.013099253642590982,
+        0.33472868136956463,
+        0.10405281583553413,
+        0.4535877151305044,
+        1.1303792470977412
+      ],
+      "scales": [
+        0.6113599024864619,
+        0.6113598879687189,
+        0.6083446528653582,
+        0.6083446346151608,
+        8.975640229994521,
+        6.685081961532784,
+        0.006033484482267013,
+        0.010225268564513394,
+        0.39108435327290264,
+        0.15219289420514417,
+        0.847978495762525,
+        1.5093100001279824
+      ]
+    },
+    "full_sample_eval": {
+      "n_rows": 70621,
+      "trade_count": 83160,
+      "accuracy_pct": 55.29,
+      "accuracy_trade_weighted_pct": 55.3,
+      "brier": 0.24521,
+      "logloss": 0.68349,
+      "avg_pred": 0.50044,
+      "actual_up_rate": 0.50045
+    }
+  },
+  "training_policy": {
+    "recommended_retrain_cadence": "daily Singapore morning retrain",
+    "live_policy": [
+      "Freeze coefficients between retrains; do not self-train every second.",
+      "Use rolling walk-forward promotion only if challenger beats champion on weighted accuracy, logloss, and Brier.",
+      "Keep confirmation features switchable so flow-like confirmation can be enabled later without changing the training scaffold."
+    ],
+    "why": "Best walk-forward family `skew_plus_vol` averaged 55.66% trade-weighted accuracy with logloss 0.68359."
+  }
+}

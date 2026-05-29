@@ -1,0 +1,13 @@
+{
+  "name": "btc-30s-market-maker-runtime",
+  "private": true,
+  "scripts": {
+    "hosted": "node scripts/hosted-market-maker-runtime.mjs",
+    "tunnel": "node scripts/start-localtunnel.mjs"
+  },
+  "dependencies": {
+    "localtunnel": "^2.0.2",
+    "pg": "^8.21.0",
+    "tardis-dev": "^16.4.2"
+  }
+}

@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: btc-30s-market-maker
+    runtime: docker
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8787"
+      - key: QUOTE_CADENCE_MS
+        value: "2000"
+      - key: PLATFORM_WS_URL
+        value: "wss://apis.turboflow.xyz/realtime"
