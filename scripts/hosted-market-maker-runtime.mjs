@@ -71,6 +71,7 @@ const fallbackCalibration = {
 const defaultSettings = {
   edgePct: 4.0,
   pfofPct: 2.5,
+  requireBinance: true,
 };
 
 const fittedMidModel = JSON.parse(
@@ -109,6 +110,9 @@ const state = {
   quote: {
     edgePct: defaultSettings.edgePct,
     pfofPct: defaultSettings.pfofPct,
+    requireBinance: defaultSettings.requireBinance,
+    active: false,
+    disabledReason: "Waiting for Binance depth",
     rawProbability: 0.5,
     displayProbability: 0.5,
     upPayout: 92.0,
@@ -255,9 +259,11 @@ function broadcastState() {
 function applyRuntimeSettings(input = {}) {
   const nextEdge = clamp(Number(input.edgePct ?? state.quote.edgePct), 0, 25);
   const nextPfof = clamp(Number(input.pfofPct ?? state.quote.pfofPct), 0, 25);
+  const nextRequireBinance = input.requireBinance ?? state.quote.requireBinance;
   state.quote.edgePct = Number.isFinite(nextEdge) ? nextEdge : state.quote.edgePct;
   state.quote.pfofPct = Number.isFinite(nextPfof) ? nextPfof : state.quote.pfofPct;
-  if (Number.isFinite(state.quote.displayProbability)) {
+  state.quote.requireBinance = Boolean(nextRequireBinance);
+  if (state.quote.active && Number.isFinite(state.quote.displayProbability)) {
     const p = state.quote.displayProbability;
     state.quote.upPayout = payoutForProbability(p, state.quote.edgePct);
     state.quote.downPayout = payoutForProbability(1 - p, state.quote.edgePct);
@@ -271,6 +277,7 @@ function recordQuoteSnapshot() {
   const last = quoteHistory[quoteHistory.length - 1];
   const snapshot = {
     ts_ms: ts,
+    active: Boolean(state.quote.active),
     up_payout: state.quote.upPayout,
     down_payout: state.quote.downPayout,
     display_probability: state.quote.displayProbability,
@@ -344,7 +351,7 @@ function processTradeMessage(msg) {
   const amount = Number(trade.usdt_value ?? trade.amount ?? 0);
   const statusText = String(trade.order_status || "");
 
-  if (!routedById.has(tradeId) && quote && Number.isFinite(actualPayout) && Number.isFinite(ourPayout) && ourPayout > actualPayout) {
+  if (!routedById.has(tradeId) && quote?.active && Number.isFinite(actualPayout) && Number.isFinite(ourPayout) && ourPayout > actualPayout) {
     routedById.set(tradeId, {
       id: tradeId,
       side,
@@ -424,7 +431,10 @@ async function fetchJsonWithTimeout(url, timeoutMs = 4000) {
 
 async function pullDepthPayload() {
   const failures = [];
-  for (const source of DEPTH_SOURCES) {
+  const allowedSources = state.quote.requireBinance
+    ? DEPTH_SOURCES.filter((source) => source.label.startsWith("Binance"))
+    : DEPTH_SOURCES;
+  for (const source of allowedSources) {
     state.diagnostics.lastDepthSourceTried = source.label;
     try {
       const result = await fetchJsonWithTimeout(source.url, 4000);
@@ -587,6 +597,9 @@ async function refreshQuoteWindow() {
       state.quote = {
         edgePct: state.quote.edgePct,
         pfofPct: state.quote.pfofPct,
+        requireBinance: state.quote.requireBinance,
+        active: true,
+        disabledReason: null,
         rawProbability,
         displayProbability: Math.abs(nextProbability - 0.5) < fallbackCalibration.neutralSnapBand ? 0.5 : nextProbability,
         upPayout: payoutForProbability(Math.abs(nextProbability - 0.5) < fallbackCalibration.neutralSnapBand ? 0.5 : nextProbability, state.quote.edgePct),
@@ -600,6 +613,8 @@ async function refreshQuoteWindow() {
     } else {
       state.quote.rawProbability = rawProbability;
       state.quote.regime = summarizeRegime(rawProbability);
+      state.quote.active = true;
+      state.quote.disabledReason = null;
     }
 
     state.feed = {
@@ -614,6 +629,10 @@ async function refreshQuoteWindow() {
   } catch (error) {
     state.diagnostics.lastError = String(error);
     state.diagnostics.lastDepthError = String(error);
+    state.quote.active = false;
+    state.quote.disabledReason = state.quote.requireBinance
+      ? "Binance depth unavailable, quote disabled"
+      : "Depth unavailable, quote disabled";
     broadcastState();
   }
 }
@@ -675,6 +694,7 @@ const server = http.createServer((req, res) => {
           ok: true,
           edgePct: state.quote.edgePct,
           pfofPct: state.quote.pfofPct,
+          requireBinance: state.quote.requireBinance,
         });
       })
       .catch((error) => {
@@ -688,6 +708,7 @@ const server = http.createServer((req, res) => {
       ok: true,
       edgePct: state.quote.edgePct,
       pfofPct: state.quote.pfofPct,
+      requireBinance: state.quote.requireBinance,
     });
     return;
   }

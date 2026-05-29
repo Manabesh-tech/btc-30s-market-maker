@@ -247,6 +247,20 @@
       background: rgba(255,255,255,0.85);
       color: var(--ink);
     }
+    .field.check {
+      justify-content: end;
+      padding-bottom: 2px;
+    }
+    .field.check label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .field.check input {
+      width: auto;
+    }
     .button-row {
       display: flex;
       gap: 10px;
@@ -469,6 +483,12 @@
             <label for="pfof-input">TC / PFOF %</label>
             <input id="pfof-input" type="number" step="0.1" min="0" max="25" />
           </div>
+          <div class="field check">
+            <label for="require-binance">
+              <input id="require-binance" type="checkbox" />
+              Binance only
+            </label>
+          </div>
           <div class="button-row">
             <button id="apply-settings">Apply</button>
             <button id="reset-settings" class="secondary">Reset Defaults</button>
@@ -540,13 +560,14 @@
       if (document.activeElement !== $("pfof-input")) {
         $("pfof-input").value = Number.isFinite(quote.pfofPct) ? Number(quote.pfofPct).toFixed(2) : "";
       }
+      $("require-binance").checked = quote.requireBinance !== false;
 
       const favored = quote.favoredSide || "Neutral";
       setChip($("quote-chip"), favored, favored === "UP" ? "good" : favored === "DOWN" ? "bad" : "warn");
       $("our-up").textContent = formatNum(quote.upPayout);
       $("our-down").textContent = formatNum(quote.downPayout);
-      $("our-up-note").textContent = favored === "UP" ? "Favored side under current signal." : "UP side at current model quote.";
-      $("our-down-note").textContent = favored === "DOWN" ? "Favored side under current signal." : "DOWN side at current model quote.";
+      $("our-up-note").textContent = quote.active === false ? (quote.disabledReason || "Quote disabled.") : favored === "UP" ? "Favored side under current signal." : "UP side at current model quote.";
+      $("our-down-note").textContent = quote.active === false ? (quote.disabledReason || "Quote disabled.") : favored === "DOWN" ? "Favored side under current signal." : "DOWN side at current model quote.";
       $("our-prob").textContent = formatPct((quote.displayProbability || 0) * 100, 2);
       $("our-regime").textContent = quote.regime || "-";
       $("feed-mid").textContent = formatNum(feed.mid, 2);
@@ -597,11 +618,12 @@
     $("apply-settings").addEventListener("click", async () => {
       const edgePct = Number($("edge-input").value);
       const pfofPct = Number($("pfof-input").value);
+      const requireBinance = $("require-binance").checked;
       $("settings-note").textContent = "Applying hosted runtime settings...";
       try {
-        const result = await postJson("/api/settings", { edgePct, pfofPct });
+        const result = await postJson("/api/settings", { edgePct, pfofPct, requireBinance });
         if (!result.ok) throw new Error(result.error || "settings update failed");
-        $("settings-note").textContent = `Applied live settings: edge ${result.edgePct.toFixed(2)}%, tc ${result.pfofPct.toFixed(2)}%.`;
+        $("settings-note").textContent = `Applied live settings: edge ${result.edgePct.toFixed(2)}%, tc ${result.pfofPct.toFixed(2)}%, binance only ${result.requireBinance ? "on" : "off"}.`;
       } catch (error) {
         $("settings-note").textContent = `Settings update failed: ${String(error)}`;
       }
@@ -612,7 +634,7 @@
       try {
         const result = await postJson("/api/settings/reset");
         if (!result.ok) throw new Error(result.error || "settings reset failed");
-        $("settings-note").textContent = `Reset to defaults: edge ${result.edgePct.toFixed(2)}%, tc ${result.pfofPct.toFixed(2)}%.`;
+        $("settings-note").textContent = `Reset to defaults: edge ${result.edgePct.toFixed(2)}%, tc ${result.pfofPct.toFixed(2)}%, binance only ${result.requireBinance ? "on" : "off"}.`;
       } catch (error) {
         $("settings-note").textContent = `Reset failed: ${String(error)}`;
       }
