@@ -6,12 +6,22 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..");
+const HOSTED_DASHBOARD_PATH = path.join(ROOT, "hosted_market_maker_dashboard.html");
 
 const PORT = Number(process.env.PORT || 8787);
 const QUOTE_CADENCE_MS = Math.max(2000, Number(process.env.QUOTE_CADENCE_MS || 2000));
 const PLATFORM_CONFIG_URL = "https://apis.turboflow.xyz/public/pm/config?version=2";
 const PLATFORM_WS_URL = process.env.PLATFORM_WS_URL || "wss://apis.turboflow.xyz/realtime";
-const BINANCE_DEPTH_URL = "https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=10";
+const DEPTH_SOURCES = [
+  {
+    label: "Binance Futures BTCUSDT",
+    url: "https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=10",
+  },
+  {
+    label: "Binance Spot BTCUSDT",
+    url: "https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=10",
+  },
+];
 
 const fallbackCalibration = {
   label: "Embedded last 7d winner",
@@ -32,6 +42,7 @@ const fallbackCalibration = {
 const fittedMidModel = JSON.parse(
   fs.readFileSync(path.join(ROOT, "live_mid_model_30s_best_trade_model.json"), "utf8"),
 );
+const fittedCoef = fittedMidModel.coefficients || {};
 
 const state = {
   startedAt: new Date().toISOString(),
@@ -94,6 +105,8 @@ const state = {
   },
   diagnostics: {
     lastError: null,
+    lastDepthError: null,
+    lastDepthSourceTried: null,
   },
 };
 
@@ -173,12 +186,15 @@ function persistenceForThreshold(threshold) {
 }
 
 function fittedProbabilityFromFeatures(features) {
-  let score = Number(fittedMidModel.intercept || 0);
+  let score = Number(fittedCoef.intercept || 0);
   for (let i = 0; i < fittedMidModel.features.length; i += 1) {
     const key = fittedMidModel.features[i];
     const raw = Number(features[key] ?? 0);
-    const z = (raw - fittedMidModel.means[i]) / Math.max(fittedMidModel.scales[i], 1e-9);
-    score += fittedMidModel.coef[i] * z;
+    const mean = Number(fittedCoef.means?.[i] ?? 0);
+    const scale = Math.max(Number(fittedCoef.scales?.[i] ?? 1), 1e-9);
+    const coef = Number(fittedCoef.coef?.[i] ?? 0);
+    const z = (raw - mean) / scale;
+    score += coef * z;
   }
   return sigmoid(score);
 }
@@ -333,6 +349,54 @@ async function pullPlatformConfigQuote() {
   broadcastState();
 }
 
+async function fetchJsonWithTimeout(url, timeoutMs = 4000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        "user-agent": "btc-30s-market-maker-runtime/1.0",
+        accept: "application/json",
+      },
+    });
+    const text = await response.text();
+    let payload = null;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = text;
+    }
+    return { ok: response.ok, status: response.status, payload };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function pullDepthPayload() {
+  const failures = [];
+  for (const source of DEPTH_SOURCES) {
+    state.diagnostics.lastDepthSourceTried = source.label;
+    try {
+      const result = await fetchJsonWithTimeout(source.url, 4000);
+      if (!result.ok) {
+        failures.push(`${source.label}: HTTP ${result.status}`);
+        continue;
+      }
+      const payload = result.payload;
+      if (!payload?.bids || !payload?.asks || !Array.isArray(payload.bids) || !Array.isArray(payload.asks)) {
+        failures.push(`${source.label}: unexpected payload ${JSON.stringify(payload).slice(0, 220)}`);
+        continue;
+      }
+      return { sourceLabel: source.label, payload };
+    } catch (error) {
+      failures.push(`${source.label}: ${String(error)}`);
+    }
+  }
+  throw new Error(failures.join(" | "));
+}
+
 function connectPlatformStream() {
   if (platformSocket) {
     try { platformSocket.close(); } catch {}
@@ -377,8 +441,7 @@ function connectPlatformStream() {
 
 async function refreshQuoteWindow() {
   try {
-    const response = await fetch(BINANCE_DEPTH_URL, { cache: "no-store" });
-    const data = await response.json();
+    const { sourceLabel, payload: data } = await pullDepthPayload();
     if (!data?.bids || !data?.asks) return;
 
     const bids = data.bids.map(([price, qty]) => ({ price: Number(price), qty: Number(qty) }));
@@ -491,14 +554,17 @@ async function refreshQuoteWindow() {
     }
 
     state.feed = {
-      source: "Binance Futures BTCUSDT",
+      source: sourceLabel,
       lastUpdateTs: new Date().toISOString(),
       mid,
       spreadBps,
     };
+    state.diagnostics.lastError = null;
+    state.diagnostics.lastDepthError = null;
     broadcastState();
   } catch (error) {
     state.diagnostics.lastError = String(error);
+    state.diagnostics.lastDepthError = String(error);
     broadcastState();
   }
 }
@@ -521,54 +587,16 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function htmlPage() {
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hosted 30s Market Maker Runtime</title>
-  <style>
-    body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background:#f7f3ee; color:#17212b; }
-    .grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:16px; }
-    .card { background:#fff; border:1px solid #ddd; border-radius:16px; padding:16px; }
-    h1 { margin:0 0 16px; }
-    h2 { margin:0 0 10px; font-size:18px; }
-    .big { font-size:28px; font-weight:700; }
-    .muted { color:#5a6672; font-size:13px; }
-    pre { background:#1e252b; color:#f3f5f6; padding:12px; border-radius:12px; overflow:auto; }
-  </style>
-</head>
-<body>
-  <h1>Hosted 30s Market Maker Runtime</h1>
-  <div class="grid">
-    <div class="card"><h2>Quote</h2><div class="big" id="quote">-</div><div class="muted" id="quoteMeta">-</div></div>
-    <div class="card"><h2>Platform</h2><div class="big" id="platform">-</div><div class="muted" id="platformMeta">-</div></div>
-    <div class="card"><h2>Stream PnL</h2><div class="big" id="pnl">-</div><div class="muted" id="pnlMeta">-</div></div>
-  </div>
-  <div class="card" style="margin-top:16px;"><h2>Runtime State</h2><pre id="raw">Loading...</pre></div>
-  <script>
-    function render(state) {
-      document.getElementById('quote').textContent = state.quote ? \`\${state.quote.upPayout.toFixed(2)} / \${state.quote.downPayout.toFixed(2)}\` : '-';
-      document.getElementById('quoteMeta').textContent = state.quote ? \`P(up) \${(state.quote.displayProbability * 100).toFixed(2)}%, window \${new Date(state.quote.windowStartTs).toLocaleTimeString()}-\${new Date(state.quote.windowEndTs).toLocaleTimeString()}\` : '-';
-      document.getElementById('platform').textContent = state.platformQuote?.upPayout != null ? \`\${state.platformQuote.upPayout.toFixed(2)} / \${state.platformQuote.downPayout.toFixed(2)}\` : '-';
-      document.getElementById('platformMeta').textContent = state.platformQuote?.impliedEdgePct != null ? \`Implied edge \${state.platformQuote.impliedEdgePct.toFixed(2)}%\` : 'Waiting for platform quote';
-      document.getElementById('pnl').textContent = state.publicTradeMonitor ? state.publicTradeMonitor.ourPnl.toFixed(2) : '-';
-      document.getElementById('pnlMeta').textContent = state.publicTradeMonitor ? \`Seen \${state.publicTradeMonitor.seenTrades}, competed \${state.publicTradeMonitor.competedTrades}, settled \${state.publicTradeMonitor.settledTrades}\` : '-';
-      document.getElementById('raw').textContent = JSON.stringify(state, null, 2);
-    }
-    fetch('/api/state').then(r => r.json()).then(render);
-    const es = new EventSource('/events');
-    es.onmessage = (event) => render(JSON.parse(event.data));
-  </script>
-</body>
-</html>`;
-}
-
 const server = http.createServer((req, res) => {
   if (req.url === "/" || req.url === "/index.html") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(htmlPage());
+    try {
+      const html = fs.readFileSync(HOSTED_DASHBOARD_PATH, "utf8");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    } catch {
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Hosted dashboard HTML missing.");
+    }
     return;
   }
   if (req.url === "/api/state") {

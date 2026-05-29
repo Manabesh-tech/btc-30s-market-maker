@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTC 30s Market Maker Dashboard</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --panel: rgba(255, 251, 245, 0.95);
+      --ink: #17212b;
+      --muted: #5a6672;
+      --accent: #0e7c66;
+      --accent-2: #a53f2b;
+      --line: rgba(23, 33, 43, 0.10);
+      --good: #0f8a4f;
+      --warn: #a26911;
+      --bad: #b43737;
+      --card-shadow: 0 16px 40px rgba(23, 33, 43, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Aptos", system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(14, 124, 102, 0.12), transparent 32%),
+        radial-gradient(circle at bottom left, rgba(165, 63, 43, 0.10), transparent 28%),
+        linear-gradient(160deg, #f8f3ea 0%, #f1ece4 55%, #ece6de 100%);
+    }
+
+    .page { width: min(1480px, calc(100vw - 28px)); margin: 20px auto 40px; }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    .hero-card, .panel, .quote-card, .notes-card, .debug-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--card-shadow);
+    }
+    .hero-card { padding: 26px 28px; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(14, 124, 102, 0.10);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 14px 0 10px;
+      font-size: clamp(28px, 3vw, 40px);
+      line-height: 1.03;
+      letter-spacing: -0.03em;
+    }
+    .hero-copy { color: var(--muted); font-size: 15px; line-height: 1.55; }
+    .hero-grid {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .mini-stat {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.75);
+      border: 1px solid rgba(23, 33, 43, 0.08);
+    }
+    .mini-stat span {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 7px;
+      font-weight: 700;
+    }
+    .mini-stat strong {
+      font-size: 19px;
+      letter-spacing: -0.03em;
+    }
+    .notes-card {
+      padding: 22px 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .notes-card h2, .panel h2, .debug-card h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+    .notes-list {
+      display: grid;
+      gap: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+    }
+    .quote-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+    .quote-card {
+      padding: 22px;
+      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .quote-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .chip {
+      min-width: 68px;
+      text-align: center;
+      padding: 10px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(23, 33, 43, 0.10);
+      color: var(--muted);
+    }
+    .chip.good { background: rgba(14, 124, 102, 0.15); color: var(--accent); }
+    .chip.warn { background: rgba(162, 105, 17, 0.14); color: var(--warn); }
+    .chip.bad { background: rgba(180, 55, 55, 0.14); color: var(--bad); }
+    .subtle {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .payout-grid, .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .payout-box, .metric-box {
+      border-radius: 18px;
+      border: 1px solid rgba(23, 33, 43, 0.10);
+      background: rgba(255,255,255,0.70);
+      padding: 16px;
+      min-height: 126px;
+    }
+    .metric-box.small { min-height: 112px; }
+    .box-label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .box-value {
+      font-size: clamp(32px, 3vw, 46px);
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+    }
+    .box-value.metric {
+      font-size: 28px;
+    }
+    .box-foot {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .panel {
+      padding: 22px 24px;
+    }
+    .factor-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .factor {
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(23, 33, 43, 0.10);
+      background: rgba(255,255,255,0.68);
+      min-height: 110px;
+    }
+    .factor strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 8px;
+      letter-spacing: 0.01em;
+    }
+    .factor p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .debug-card {
+      padding: 20px 22px;
+      margin-top: 18px;
+    }
+    pre {
+      margin: 0;
+      background: #1e252b;
+      color: #f3f5f6;
+      padding: 14px;
+      border-radius: 16px;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.55;
+      max-height: 360px;
+    }
+    @media (max-width: 1180px) {
+      .hero, .quote-grid { grid-template-columns: 1fr; }
+      .factor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .payout-grid, .metric-grid, .factor-grid, .hero-grid { grid-template-columns: 1fr; }
+      .page { width: min(100vw - 18px, 1480px); }
+      .box-value { font-size: 34px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <article class="hero-card">
+        <div class="eyebrow">Hosted 30s Model</div>
+        <h1>BTC 30s market maker dashboard</h1>
+        <div class="hero-copy">
+          Server-side quote engine, Turboflow platform quote, and live public-trade counterfactual PnL in one page.
+          This hosted version keeps the model state alive on Render instead of depending on your laptop.
+        </div>
+        <div class="hero-grid">
+          <div class="mini-stat"><span>Model P(up)</span><strong id="hero-prob">-</strong></div>
+          <div class="mini-stat"><span>Quote Window</span><strong id="hero-window">-</strong></div>
+          <div class="mini-stat"><span>Feed Source</span><strong id="hero-feed">-</strong></div>
+          <div class="mini-stat"><span>Runtime</span><strong id="hero-runtime">-</strong></div>
+        </div>
+      </article>
+      <aside class="notes-card">
+        <h2>What this page is doing</h2>
+        <div class="notes-list">
+          <div><strong>Our quote:</strong> fitted 30s mid model plus your constant edge.</div>
+          <div><strong>Platform quote:</strong> Turboflow public quote stream or config fallback.</div>
+          <div><strong>Stream PnL:</strong> best payout wins the trade; settled from public trade feed.</div>
+          <div><strong>Neutral 92/92:</strong> appears only when live market data is unavailable or the model is exactly neutral.</div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="layout">
+      <div class="quote-grid">
+        <article class="quote-card">
+          <div class="quote-top">
+            <div>
+              <h2>Live Quote</h2>
+              <div class="subtle">Server-side fitted probability model with a fixed 2-second quote window.</div>
+            </div>
+            <div class="chip" id="quote-chip">-</div>
+          </div>
+          <div class="payout-grid">
+            <div class="payout-box">
+              <span class="box-label">Up Payout</span>
+              <div class="box-value" id="our-up">-</div>
+              <div class="box-foot" id="our-up-note">-</div>
+            </div>
+            <div class="payout-box">
+              <span class="box-label">Down Payout</span>
+              <div class="box-value" id="our-down">-</div>
+              <div class="box-foot" id="our-down-note">-</div>
+            </div>
+          </div>
+          <div class="metric-grid">
+            <div class="metric-box small">
+              <span class="box-label">Displayed P(up)</span>
+              <div class="box-value metric" id="our-prob">-</div>
+              <div class="box-foot">This is the quoted mid after smoothing and caps.</div>
+            </div>
+            <div class="metric-box small">
+              <span class="box-label">Regime</span>
+              <div class="box-value metric" id="our-regime">-</div>
+              <div class="box-foot">Current live classification from the fitted model.</div>
+            </div>
+            <div class="metric-box small">
+              <span class="box-label">Feed Mid</span>
+              <div class="box-value metric" id="feed-mid">-</div>
+              <div class="box-foot" id="feed-note">-</div>
+            </div>
+            <div class="metric-box small">
+              <span class="box-label">Market Spread</span>
+              <div class="box-value metric" id="feed-spread">-</div>
+              <div class="box-foot">External feed spread in basis points.</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="quote-card">
+          <div class="quote-top">
+            <div>
+              <h2>Platform Stream Quote</h2>
+              <div class="subtle">Turboflow public quote feed, plus edge and price comparison against our quote.</div>
+            </div>
+            <div class="chip" id="platform-chip">-</div>
+          </div>
+          <div class="payout-grid">
+            <div class="payout-box">
+              <span class="box-label">Platform Up</span>
+              <div class="box-value" id="platform-up">-</div>
+              <div class="box-foot" id="platform-up-note">-</div>
+            </div>
+            <div class="payout-box">
+              <span class="box-label">Platform Down</span>
+              <div class="box-value" id="platform-down">-</div>
+              <div class="box-foot" id="platform-down-note">-</div>
+            </div>
+          </div>
+          <div class="metric-grid">
+            <div class="metric-box small">
+              <span class="box-label">Implied Edge</span>
+              <div class="box-value metric" id="platform-edge">-</div>
+              <div class="box-foot">Probability/overround method from their two-way quote.</div>
+            </div>
+            <div class="metric-box small">
+              <span class="box-label">Quote Source</span>
+              <div class="box-value metric" id="platform-source">-</div>
+              <div class="box-foot">Realtime feed when available, config fallback otherwise.</div>
+            </div>
+            <div class="metric-box small">
+              <span class="box-label">Up Price Delta</span>
+              <div class="box-value metric" id="delta-up">-</div>
+              <div class="box-foot">Positive means our UP payout is better for the user.</div>
+            </div>
+            <div class="metric-box small">
+              <span class="box-label">Down Price Delta</span>
+              <div class="box-value metric" id="delta-down">-</div>
+              <div class="box-foot">Positive means our DOWN payout is better for the user.</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="quote-card">
+          <div class="quote-top">
+            <div>
+              <h2>Public Trade Stream Monitor</h2>
+              <div class="subtle">Counterfactual PnL using live public BTC 30s trades, best payout wins the flow.</div>
+            </div>
+            <div class="chip" id="pnl-chip">-</div>
+          </div>
+          <div class="payout-grid">
+            <div class="payout-box">
+              <span class="box-label">Our Stream PnL</span>
+              <div class="box-value" id="stream-pnl">-</div>
+              <div class="box-foot" id="stream-pnl-note">-</div>
+            </div>
+            <div class="payout-box">
+              <span class="box-label">Competed Volume</span>
+              <div class="box-value" id="stream-volume">-</div>
+              <div class="box-foot">Total BTC 30s public flow we won on price.</div>
+            </div>
+          </div>
+          <div class="metric-grid">
+            <div class="metric-box small">
+              <span class="box-label">Trades Seen</span>
+              <div class="box-value metric" id="stream-seen">-</div>
+              <div class="box-foot">All public BTC 30s trades observed.</div>
+            </div>
+            <div class="metric-box small">
+              <span class="box-label">Competed Trades</span>
+              <div class="box-value metric" id="stream-competed">-</div>
+              <div class="box-foot">Trades where our payout beat theirs.</div>
+            </div>
+            <div class="metric-box small">
+              <span class="box-label">Settled Trades</span>
+              <div class="box-value metric" id="stream-settled">-</div>
+              <div class="box-foot">Routed trades already finished and settled.</div>
+            </div>
+            <div class="metric-box small">
+              <span class="box-label">Wins / Losses</span>
+              <div class="box-value metric" id="stream-winloss">-</div>
+              <div class="box-foot">Wins = user lost; losses = user won.</div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <section class="panel">
+        <h2>Factor Explainer</h2>
+        <div class="factor-grid">
+          <div class="factor"><strong>Top-5 book imbalance</strong><p>Main directional signal. Positive means bid-side depth is heavier than ask-side depth near the top of book.</p></div>
+          <div class="factor"><strong>Signed persist 0.5 / 0.6</strong><p>How long imbalance has stayed beyond those thresholds. Positive means persistent bid pressure, negative means persistent ask pressure.</p></div>
+          <div class="factor"><strong>Microprice deviation</strong><p>Top-of-book lean versus simple mid. Helps detect whether the best bid/ask pressure is already tilted.</p></div>
+          <div class="factor"><strong>Short vol</strong><p>Used as context, not the main directional driver. High short-term noise should shrink confidence.</p></div>
+          <div class="factor"><strong>Thin depth</strong><p>Flags when current top-10 depth is shallow relative to recent normal, so dramatic imbalance is treated more cautiously.</p></div>
+          <div class="factor"><strong>Public stream PnL</strong><p>Best payout wins the trade. Settlement uses platform entry and settled prices from the public trade feed.</p></div>
+        </div>
+      </section>
+
+      <section class="debug-card">
+        <h2>Runtime Diagnostics</h2>
+        <pre id="raw-state">Loading...</pre>
+      </section>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function formatNum(value, digits = 2) {
+      return Number.isFinite(value) ? Number(value).toFixed(digits) : "-";
+    }
+
+    function formatPct(value, digits = 2) {
+      return Number.isFinite(value) ? `${Number(value).toFixed(digits)}%` : "-";
+    }
+
+    function chipClass(kind) {
+      if (kind === "good") return "chip good";
+      if (kind === "warn") return "chip warn";
+      if (kind === "bad") return "chip bad";
+      return "chip";
+    }
+
+    function setChip(node, text, kind) {
+      node.textContent = text;
+      node.className = chipClass(kind);
+    }
+
+    function render(state) {
+      const quote = state.quote || {};
+      const platform = state.platformQuote || {};
+      const stream = state.publicTradeMonitor || {};
+      const feed = state.feed || {};
+      const diag = state.diagnostics || {};
+
+      $("hero-prob").textContent = formatPct((quote.displayProbability || 0) * 100, 2);
+      $("hero-window").textContent = quote.windowStartTs ? new Date(quote.windowStartTs).toLocaleTimeString() : "-";
+      $("hero-feed").textContent = feed.source || "-";
+      $("hero-runtime").textContent = `${state.runtime?.quoteCadenceSeconds ?? "-"}s cadence`;
+
+      const favored = quote.favoredSide || "Neutral";
+      setChip($("quote-chip"), favored, favored === "UP" ? "good" : favored === "DOWN" ? "bad" : "warn");
+      $("our-up").textContent = formatNum(quote.upPayout);
+      $("our-down").textContent = formatNum(quote.downPayout);
+      $("our-up-note").textContent = favored === "UP" ? "Favored side under current signal." : "UP side at current model quote.";
+      $("our-down-note").textContent = favored === "DOWN" ? "Favored side under current signal." : "DOWN side at current model quote.";
+      $("our-prob").textContent = formatPct((quote.displayProbability || 0) * 100, 2);
+      $("our-regime").textContent = quote.regime || "-";
+      $("feed-mid").textContent = formatNum(feed.mid, 2);
+      $("feed-note").textContent = feed.lastUpdateTs ? `Updated ${new Date(feed.lastUpdateTs).toLocaleTimeString()}` : "No successful live market-data pull yet.";
+      $("feed-spread").textContent = formatNum(feed.spreadBps, 2);
+
+      const platformReady = Number.isFinite(platform.upPayout) && Number.isFinite(platform.downPayout);
+      setChip($("platform-chip"), platformReady ? "Live" : "No Quote", platformReady ? "good" : "warn");
+      $("platform-up").textContent = formatNum(platform.upPayout);
+      $("platform-down").textContent = formatNum(platform.downPayout);
+      $("platform-up-note").textContent = platform.lastUpdateTs ? `Updated ${new Date(platform.lastUpdateTs).toLocaleTimeString()}` : "Waiting for public quote.";
+      $("platform-down-note").textContent = platform.source ? `Source: ${platform.source}` : "Waiting for public quote.";
+      $("platform-edge").textContent = formatPct(platform.impliedEdgePct, 2);
+      $("platform-source").textContent = platform.source || "-";
+      $("delta-up").textContent = Number.isFinite(platform.upPayout) && Number.isFinite(quote.upPayout) ? formatNum(quote.upPayout - platform.upPayout, 2) : "-";
+      $("delta-down").textContent = Number.isFinite(platform.downPayout) && Number.isFinite(quote.downPayout) ? formatNum(quote.downPayout - platform.downPayout, 2) : "-";
+
+      const pnl = Number(stream.ourPnl || 0);
+      setChip($("pnl-chip"), stream.status || "offline", stream.status === "connected" ? "good" : stream.status === "connecting" ? "warn" : "bad");
+      $("stream-pnl").textContent = formatNum(pnl, 2);
+      $("stream-pnl-note").textContent = stream.lastTradeTs ? `Last BTC 30s trade seen at ${new Date(stream.lastTradeTs).toLocaleTimeString()}.` : "Waiting for BTC 30s public trades.";
+      $("stream-volume").textContent = formatNum(stream.competedVolume, 2);
+      $("stream-seen").textContent = String(stream.seenTrades ?? 0);
+      $("stream-competed").textContent = String(stream.competedTrades ?? 0);
+      $("stream-settled").textContent = String(stream.settledTrades ?? 0);
+      $("stream-winloss").textContent = `${stream.wins ?? 0} / ${stream.losses ?? 0}`;
+
+      $("raw-state").textContent = JSON.stringify({
+        quote,
+        platformQuote: platform,
+        publicTradeMonitor: stream,
+        feed,
+        featureVector: state.featureVector,
+        diagnostics: diag,
+        calibration: state.calibration,
+      }, null, 2);
+    }
+
+    fetch("/api/state").then((r) => r.json()).then(render);
+    const es = new EventSource("/events");
+    es.onmessage = (event) => render(JSON.parse(event.data));
+  </script>
+</body>
+</html>
