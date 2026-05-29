@@ -313,7 +313,14 @@ function processTradeMessage(msg) {
 async function pullPlatformConfigQuote() {
   const response = await fetch(PLATFORM_CONFIG_URL, { cache: "no-store" });
   const payload = await response.json();
-  const btc = (payload?.data || []).find((item) => String(item?.pair_name || "").toUpperCase() === "BTC/USDT");
+  const pairList = Array.isArray(payload?.data?.data)
+    ? payload.data.data
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.pairs)
+        ? payload.pairs
+        : [];
+  const btc = pairList.find((item) => String(item?.pair_name || item?.pairName || "").toUpperCase() === "BTC/USDT");
   const config30 = btc?.order_configs?.find((item) => Number(item?.duration) === 30);
   if (!config30) return;
   state.platformQuote = {
