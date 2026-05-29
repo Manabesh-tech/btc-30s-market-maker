@@ -220,6 +220,58 @@
       padding: 20px 22px;
       margin-top: 18px;
     }
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .field input {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(23,33,43,0.12);
+      padding: 12px 14px;
+      font: inherit;
+      background: rgba(255,255,255,0.85);
+      color: var(--ink);
+    }
+    .button-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .button-row button {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      background: #17212b;
+      color: #fff;
+    }
+    .button-row button.secondary {
+      background: rgba(23,33,43,0.10);
+      color: var(--ink);
+    }
+    .status-note {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
     pre {
       margin: 0;
       background: #1e252b;
@@ -407,6 +459,27 @@
       </div>
 
       <section class="panel">
+        <h2>Live Controls</h2>
+        <div class="control-grid">
+          <div class="field">
+            <label for="edge-input">Gross Edge %</label>
+            <input id="edge-input" type="number" step="0.1" min="0" max="25" />
+          </div>
+          <div class="field">
+            <label for="pfof-input">TC / PFOF %</label>
+            <input id="pfof-input" type="number" step="0.1" min="0" max="25" />
+          </div>
+          <div class="button-row">
+            <button id="apply-settings">Apply</button>
+            <button id="reset-settings" class="secondary">Reset Defaults</button>
+          </div>
+          <div class="status-note" id="settings-note">
+            Hosted page now controls the shared server-side runtime. Changing these values updates the live quote for everyone on this URL.
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
         <h2>Factor Explainer</h2>
         <div class="factor-grid">
           <div class="factor"><strong>Top-5 book imbalance</strong><p>Main directional signal. Positive means bid-side depth is heavier than ask-side depth near the top of book.</p></div>
@@ -427,6 +500,7 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    let lastState = null;
 
     function formatNum(value, digits = 2) {
       return Number.isFinite(value) ? Number(value).toFixed(digits) : "-";
@@ -449,6 +523,7 @@
     }
 
     function render(state) {
+      lastState = state;
       const quote = state.quote || {};
       const platform = state.platformQuote || {};
       const stream = state.publicTradeMonitor || {};
@@ -459,6 +534,8 @@
       $("hero-window").textContent = quote.windowStartTs ? new Date(quote.windowStartTs).toLocaleTimeString() : "-";
       $("hero-feed").textContent = feed.source || "-";
       $("hero-runtime").textContent = `${state.runtime?.quoteCadenceSeconds ?? "-"}s cadence`;
+      $("edge-input").value = Number.isFinite(quote.edgePct) ? Number(quote.edgePct).toFixed(2) : "";
+      $("pfof-input").value = Number.isFinite(quote.pfofPct) ? Number(quote.pfofPct).toFixed(2) : "";
 
       const favored = quote.favoredSide || "Neutral";
       setChip($("quote-chip"), favored, favored === "UP" ? "good" : favored === "DOWN" ? "bad" : "warn");
@@ -503,6 +580,39 @@
         calibration: state.calibration,
       }, null, 2);
     }
+
+    async function postJson(url, payload) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload ? JSON.stringify(payload) : "",
+      });
+      return response.json();
+    }
+
+    $("apply-settings").addEventListener("click", async () => {
+      const edgePct = Number($("edge-input").value);
+      const pfofPct = Number($("pfof-input").value);
+      $("settings-note").textContent = "Applying hosted runtime settings...";
+      try {
+        const result = await postJson("/api/settings", { edgePct, pfofPct });
+        if (!result.ok) throw new Error(result.error || "settings update failed");
+        $("settings-note").textContent = `Applied live settings: edge ${result.edgePct.toFixed(2)}%, tc ${result.pfofPct.toFixed(2)}%.`;
+      } catch (error) {
+        $("settings-note").textContent = `Settings update failed: ${String(error)}`;
+      }
+    });
+
+    $("reset-settings").addEventListener("click", async () => {
+      $("settings-note").textContent = "Resetting to defaults...";
+      try {
+        const result = await postJson("/api/settings/reset");
+        if (!result.ok) throw new Error(result.error || "settings reset failed");
+        $("settings-note").textContent = `Reset to defaults: edge ${result.edgePct.toFixed(2)}%, tc ${result.pfofPct.toFixed(2)}%.`;
+      } catch (error) {
+        $("settings-note").textContent = `Reset failed: ${String(error)}`;
+      }
+    });
 
     fetch("/api/state").then((r) => r.json()).then(render);
     const es = new EventSource("/events");

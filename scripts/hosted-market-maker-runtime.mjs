@@ -68,6 +68,11 @@ const fallbackCalibration = {
   neutralSnapBand: 0.0015,
 };
 
+const defaultSettings = {
+  edgePct: 4.0,
+  pfofPct: 2.5,
+};
+
 const fittedMidModel = JSON.parse(
   fs.readFileSync(path.join(ROOT, "live_mid_model_30s_best_trade_model.json"), "utf8"),
 );
@@ -102,8 +107,8 @@ const state = {
     ret_abs_10s: 0,
   },
   quote: {
-    edgePct: 4.0,
-    pfofPct: 2.5,
+    edgePct: defaultSettings.edgePct,
+    pfofPct: defaultSettings.pfofPct,
     rawProbability: 0.5,
     displayProbability: 0.5,
     upPayout: 92.0,
@@ -245,6 +250,20 @@ function broadcastState() {
       sseClients.delete(res);
     }
   }
+}
+
+function applyRuntimeSettings(input = {}) {
+  const nextEdge = clamp(Number(input.edgePct ?? state.quote.edgePct), 0, 25);
+  const nextPfof = clamp(Number(input.pfofPct ?? state.quote.pfofPct), 0, 25);
+  state.quote.edgePct = Number.isFinite(nextEdge) ? nextEdge : state.quote.edgePct;
+  state.quote.pfofPct = Number.isFinite(nextPfof) ? nextPfof : state.quote.pfofPct;
+  if (Number.isFinite(state.quote.displayProbability)) {
+    const p = state.quote.displayProbability;
+    state.quote.upPayout = payoutForProbability(p, state.quote.edgePct);
+    state.quote.downPayout = payoutForProbability(1 - p, state.quote.edgePct);
+  }
+  recordQuoteSnapshot();
+  broadcastState();
 }
 
 function recordQuoteSnapshot() {
@@ -617,6 +636,20 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 1_000_000) {
+        reject(new Error("request body too large"));
+      }
+    });
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
+  });
+}
+
 const server = http.createServer((req, res) => {
   if (req.url === "/" || req.url === "/index.html") {
     try {
@@ -631,6 +664,31 @@ const server = http.createServer((req, res) => {
   }
   if (req.url === "/api/state") {
     sendJson(res, 200, state);
+    return;
+  }
+  if (req.url === "/api/settings" && req.method === "POST") {
+    readRequestBody(req)
+      .then((body) => {
+        const payload = body ? JSON.parse(body) : {};
+        applyRuntimeSettings(payload);
+        sendJson(res, 200, {
+          ok: true,
+          edgePct: state.quote.edgePct,
+          pfofPct: state.quote.pfofPct,
+        });
+      })
+      .catch((error) => {
+        sendJson(res, 400, { ok: false, error: String(error) });
+      });
+    return;
+  }
+  if (req.url === "/api/settings/reset" && req.method === "POST") {
+    applyRuntimeSettings(defaultSettings);
+    sendJson(res, 200, {
+      ok: true,
+      edgePct: state.quote.edgePct,
+      pfofPct: state.quote.pfofPct,
+    });
     return;
   }
   if (req.url === "/health") {
