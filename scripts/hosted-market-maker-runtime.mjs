@@ -16,10 +16,39 @@ const DEPTH_SOURCES = [
   {
     label: "Binance Futures BTCUSDT",
     url: "https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=10",
+    normalize(payload) {
+      if (!payload?.bids || !payload?.asks) return null;
+      return { bids: payload.bids, asks: payload.asks };
+    },
   },
   {
     label: "Binance Spot BTCUSDT",
     url: "https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=10",
+    normalize(payload) {
+      if (!payload?.bids || !payload?.asks) return null;
+      return { bids: payload.bids, asks: payload.asks };
+    },
+  },
+  {
+    label: "Bybit Linear BTCUSDT",
+    url: "https://api.bybit.com/v5/market/orderbook?category=linear&symbol=BTCUSDT&limit=10",
+    normalize(payload) {
+      const bids = payload?.result?.b;
+      const asks = payload?.result?.a;
+      if (!Array.isArray(bids) || !Array.isArray(asks)) return null;
+      return { bids, asks };
+    },
+  },
+  {
+    label: "OKX BTC-USDT-SWAP",
+    url: "https://www.okx.com/api/v5/market/books?instId=BTC-USDT-SWAP&sz=10",
+    normalize(payload) {
+      const row = Array.isArray(payload?.data) ? payload.data[0] : null;
+      const bids = row?.bids;
+      const asks = row?.asks;
+      if (!Array.isArray(bids) || !Array.isArray(asks)) return null;
+      return { bids, asks };
+    },
   },
 ];
 
@@ -385,11 +414,12 @@ async function pullDepthPayload() {
         continue;
       }
       const payload = result.payload;
-      if (!payload?.bids || !payload?.asks || !Array.isArray(payload.bids) || !Array.isArray(payload.asks)) {
+      const normalized = source.normalize?.(payload);
+      if (!normalized?.bids || !normalized?.asks || !Array.isArray(normalized.bids) || !Array.isArray(normalized.asks)) {
         failures.push(`${source.label}: unexpected payload ${JSON.stringify(payload).slice(0, 220)}`);
         continue;
       }
-      return { sourceLabel: source.label, payload };
+      return { sourceLabel: source.label, payload: normalized };
     } catch (error) {
       failures.push(`${source.label}: ${String(error)}`);
     }
