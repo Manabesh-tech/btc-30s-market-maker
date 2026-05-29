@@ -534,8 +534,12 @@
       $("hero-window").textContent = quote.windowStartTs ? new Date(quote.windowStartTs).toLocaleTimeString() : "-";
       $("hero-feed").textContent = feed.source || "-";
       $("hero-runtime").textContent = `${state.runtime?.quoteCadenceSeconds ?? "-"}s cadence`;
-      $("edge-input").value = Number.isFinite(quote.edgePct) ? Number(quote.edgePct).toFixed(2) : "";
-      $("pfof-input").value = Number.isFinite(quote.pfofPct) ? Number(quote.pfofPct).toFixed(2) : "";
+      if (document.activeElement !== $("edge-input")) {
+        $("edge-input").value = Number.isFinite(quote.edgePct) ? Number(quote.edgePct).toFixed(2) : "";
+      }
+      if (document.activeElement !== $("pfof-input")) {
+        $("pfof-input").value = Number.isFinite(quote.pfofPct) ? Number(quote.pfofPct).toFixed(2) : "";
+      }
 
       const favored = quote.favoredSide || "Neutral";
       setChip($("quote-chip"), favored, favored === "UP" ? "good" : favored === "DOWN" ? "bad" : "warn");
