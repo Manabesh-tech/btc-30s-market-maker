@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3m Market Maker Console</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --panel: rgba(255, 251, 245, 0.92);
+      --ink: #17212b;
+      --muted: #5a6672;
+      --accent: #0e7c66;
+      --accent-2: #a53f2b;
+      --line: rgba(23, 33, 43, 0.12);
+      --good: #0f8a4f;
+      --warn: #a26911;
+      --bad: #b43737;
+      --shadow: 0 16px 40px rgba(23, 33, 43, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Aptos", system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(14, 124, 102, 0.12), transparent 32%),
+        radial-gradient(circle at bottom left, rgba(165, 63, 43, 0.12), transparent 28%),
+        linear-gradient(160deg, #f8f3ea 0%, #f1ece4 55%, #ece6de 100%);
+    }
+
+    .page {
+      width: min(1480px, calc(100vw - 28px));
+      margin: 20px auto 42px;
+    }
+
+    .hero,
+    .layout,
+    .lower-grid,
+    .monitor-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero {
+      grid-template-columns: 1.5fr 1fr;
+      margin-bottom: 18px;
+    }
+
+    .layout {
+      grid-template-columns: 380px minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .lower-grid {
+      grid-template-columns: 1.15fr 0.85fr;
+      margin-top: 18px;
+    }
+
+    .monitor-grid {
+      grid-template-columns: 0.95fr 1.05fr;
+      margin-top: 18px;
+    }
+
+    .panel,
+    .hero-card,
+    .notes-card,
+    .pair-card,
+    .table-card,
+    .formula-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-card,
+    .notes-card,
+    .panel,
+    .pair-card,
+    .table-card,
+    .formula-card {
+      padding: 24px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(14, 124, 102, 0.1);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 14px 0 10px;
+      font-size: clamp(30px, 3vw, 42px);
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero-copy,
+    .subtle,
+    .notes-list,
+    .table-foot {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .hero-stats,
+    .mini-grid,
+    .metric-grid,
+    .control-grid,
+    .status-grid,
+    .quote-grid,
+    .split-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .hero-stats,
+    .mini-grid,
+    .metric-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .control-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .status-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 12px;
+    }
+
+    .quote-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 14px;
+    }
+
+    .split-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 14px;
+    }
+
+    .mini-stat,
+    .metric,
+    .quote-box,
+    .status-box,
+    .signal-chip,
+    .split-card {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.74);
+      border: 1px solid rgba(23, 33, 43, 0.08);
+    }
+
+    .mini-stat span,
+    .metric span,
+    .quote-box span,
+    .status-box span,
+    .split-card span,
+    .field label,
+    th {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .mini-stat strong,
+    .metric strong,
+    .status-box strong,
+    .split-card strong {
+      font-size: 20px;
+      letter-spacing: -0.03em;
+    }
+
+    .split-card small {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .quote-box .quote-value {
+      font-size: clamp(34px, 3vw, 48px);
+      line-height: 1;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+    }
+
+    .quote-note,
+    .metric small,
+    .status-box small {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(23, 33, 43, 0.12);
+      background: rgba(255, 255, 255, 0.84);
+      color: var(--ink);
+      font: inherit;
+      padding: 12px 14px;
+    }
+
+    .mode-row,
+    .button-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .mode-button,
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+    }
+
+    .mode-button:hover,
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    .mode-button {
+      background: rgba(23, 33, 43, 0.08);
+      color: var(--muted);
+    }
+
+    .mode-button.active {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    button.secondary {
+      background: rgba(23, 33, 43, 0.09);
+      color: var(--ink);
+    }
+
+    .signal-chip {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .signal-chip strong {
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .pair-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .pair-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .badge {
+      padding: 9px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(23, 33, 43, 0.08);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .badge.good { background: rgba(15, 138, 79, 0.14); color: var(--good); }
+    .badge.warn { background: rgba(162, 105, 17, 0.14); color: var(--warn); }
+    .badge.bad { background: rgba(180, 55, 55, 0.14); color: var(--bad); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid rgba(23, 33, 43, 0.08);
+      vertical-align: top;
+      font-size: 13px;
+    }
+
+    td strong {
+      font-size: 14px;
+    }
+
+    .formula-block {
+      border-radius: 16px;
+      background: #1e252b;
+      color: #f3f5f6;
+      padding: 14px 16px;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow: auto;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: rgba(23, 33, 43, 0.08);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .pill.live { background: rgba(15, 138, 79, 0.12); color: var(--good); }
+    .pill.wait { background: rgba(162, 105, 17, 0.12); color: var(--warn); }
+    .pill.bad { background: rgba(180, 55, 55, 0.12); color: var(--bad); }
+
+    .footnote {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 1180px) {
+      .hero,
+      .layout,
+      .lower-grid,
+      .monitor-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        width: min(100vw - 18px, 1480px);
+      }
+
+      .hero-stats,
+      .mini-grid,
+      .metric-grid,
+      .control-grid,
+      .status-grid,
+      .quote-grid,
+      .split-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <article class="hero-card">
+        <div class="eyebrow">3m Product Console</div>
+        <h1>Mean-reversion quote dashboard for the 3 minute product</h1>
+        <div class="hero-copy">
+          Live Binance-driven `3m` move classifier, constant-edge payout engine, and real-time comparison against the current Turboflow public stream.
+          This version is built to work like the `30s` console: you enter the edge, we compute our fair side, then we show exactly how we differ from the platform.
+        </div>
+        <div class="hero-stats" style="margin-top:18px;">
+          <div class="mini-stat"><span>Selected Edge</span><strong id="hero-edge">-</strong></div>
+          <div class="mini-stat"><span>Neutral Quote</span><strong id="hero-neutral">-</strong></div>
+          <div class="mini-stat"><span>Model Mode</span><strong id="hero-mode">-</strong></div>
+          <div class="mini-stat"><span>Platform Feed</span><strong id="hero-platform">-</strong></div>
+        </div>
+      </article>
+      <aside class="notes-card">
+        <h2>Implementation view</h2>
+        <div class="notes-list">
+          <div><strong>Signal:</strong> last `3m` move in bps from live Binance mid-price history.</div>
+          <div><strong>Dangerous side:</strong> mean-reversion side. After an up move, `Lower` is dangerous. After a down move, `Higher` is dangerous.</div>
+          <div><strong>Probability:</strong> either a conservative phase-1 schedule or the raw backtest schedule.</div>
+          <div><strong>Quote engine:</strong> constant-edge payouts from your entered edge, then clamped to the platform product range.</div>
+        </div>
+        <div class="footnote">
+          Current product limits from the public config are reused here: `65%` payout floor and `105%` cap for the `3m` product family.
+        </div>
+      </aside>
+    </section>
+
+    <section class="layout">
+      <aside>
+        <article class="panel">
+          <h2>Controls</h2>
+          <div class="control-grid">
+            <div class="field">
+              <label for="edge-input">Gross Edge %</label>
+              <input id="edge-input" type="number" min="0" max="20" step="0.1" value="4.0" />
+            </div>
+            <div class="field">
+              <label for="pair-filter">View</label>
+              <select id="pair-filter">
+                <option value="all">BTC + ETH</option>
+                <option value="BTC/USDT">BTC only</option>
+                <option value="ETH/USDT">ETH only</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mode-row">
+            <button class="mode-button active" data-mode="phase1">Phase 1</button>
+            <button class="mode-button" data-mode="empirical">Raw Backtest</button>
+          </div>
+
+          <div class="button-row">
+            <button id="refresh-btn" class="primary">Refresh Now</button>
+            <button id="monitor-reset-btn" class="secondary">Reset Monitor</button>
+            <button id="reset-btn" class="secondary">Reset Defaults</button>
+          </div>
+
+          <div class="status-grid">
+            <div class="status-box">
+              <span>Binance Feed</span>
+              <strong id="binance-status">-</strong>
+              <small id="binance-note">-</small>
+            </div>
+            <div class="status-box">
+              <span>Platform Feed</span>
+              <strong id="platform-status">-</strong>
+              <small id="platform-note">-</small>
+            </div>
+          </div>
+
+          <div class="formula-card" style="margin-top:18px; padding:0; border:none; box-shadow:none; background:transparent;">
+            <h2 style="margin-bottom:10px;">Quote Formula</h2>
+            <div class="formula-block" id="formula-text">Loading...</div>
+          </div>
+        </article>
+      </aside>
+
+      <main class="pair-stack" id="pair-stack"></main>
+    </section>
+
+    <section class="lower-grid">
+      <article class="table-card">
+        <h2>Bucket Probability Board</h2>
+        <div class="table-foot">
+          This is the exact bucket schedule the live quote engine is using right now. The dangerous-side probability is the input to the constant-edge pricing formula.
+        </div>
+        <div id="bucket-board" style="margin-top:14px;"></div>
+      </article>
+
+      <article class="table-card">
+        <h2>Platform Snapshot</h2>
+        <div class="table-foot">
+          Latest public `3m` quote pulled from `https://apis.turboflow.xyz/public/pm/config?version=2` and kept live with the Turboflow realtime socket.
+        </div>
+        <div id="platform-board" style="margin-top:14px;"></div>
+      </article>
+    </section>
+
+    <section class="monitor-grid">
+      <article class="table-card">
+        <h2>Counterfactual PnL Monitor</h2>
+        <div class="table-foot">
+          Starts from this browser session or the last monitor reset. A trade routes to us only when our payout is strictly better than the platform payout actually traded on that side.
+        </div>
+        <div id="monitor-summary" style="margin-top:14px;"></div>
+        <div id="monitor-splits"></div>
+        <div class="footnote" id="monitor-note" style="margin-top:14px;">
+          Waiting for live `dex_predict_market` trade events.
+        </div>
+      </article>
+
+      <article class="table-card">
+        <h2>Recent Routed Trades</h2>
+        <div class="table-foot">
+          Best-price wins at trade time. PnL settles only after the public feed marks the trade `Finished`.
+        </div>
+        <div id="monitor-trades" style="margin-top:14px;"></div>
+      </article>
+    </section>
+  </div>
+
+  <script src="/3m/live_3m_market_maker_console.js"></script>
+</body>
+</html>

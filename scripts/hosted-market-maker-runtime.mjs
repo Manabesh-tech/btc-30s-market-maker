@@ -7,6 +7,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..");
 const HOSTED_DASHBOARD_PATH = path.join(ROOT, "hosted_market_maker_dashboard.html");
+const THREE_MIN_DASHBOARD_PATH = path.join(ROOT, "live_3m_market_maker_console.html");
+const THREE_MIN_SCRIPT_PATH = path.join(ROOT, "live_3m_market_maker_console.js");
 
 const PORT = Number(process.env.PORT || 8787);
 const QUOTE_CADENCE_MS = Math.max(2000, Number(process.env.QUOTE_CADENCE_MS || 2000));
@@ -677,6 +679,17 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function sendFile(res, filePath, contentType, missingMessage) {
+  try {
+    const body = fs.readFileSync(filePath, "utf8");
+    res.writeHead(200, { "Content-Type": contentType });
+    res.end(body);
+  } catch {
+    res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end(missingMessage);
+  }
+}
+
 function readRequestBody(req) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -693,14 +706,15 @@ function readRequestBody(req) {
 
 const server = http.createServer((req, res) => {
   if (req.url === "/" || req.url === "/index.html") {
-    try {
-      const html = fs.readFileSync(HOSTED_DASHBOARD_PATH, "utf8");
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(html);
-    } catch {
-      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Hosted dashboard HTML missing.");
-    }
+    sendFile(res, HOSTED_DASHBOARD_PATH, "text/html; charset=utf-8", "Hosted dashboard HTML missing.");
+    return;
+  }
+  if (req.url === "/3m" || req.url === "/3m/" || req.url === "/3m/index.html") {
+    sendFile(res, THREE_MIN_DASHBOARD_PATH, "text/html; charset=utf-8", "3m dashboard HTML missing.");
+    return;
+  }
+  if (req.url === "/3m/live_3m_market_maker_console.js") {
+    sendFile(res, THREE_MIN_SCRIPT_PATH, "application/javascript; charset=utf-8", "3m dashboard JS missing.");
     return;
   }
   if (req.url === "/api/state") {
