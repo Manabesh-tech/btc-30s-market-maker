@@ -197,6 +197,40 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
     }
+    .trade-table-wrap {
+      margin-top: 16px;
+      overflow-x: auto;
+      border: 1px solid rgba(23, 33, 43, 0.08);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.72);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid rgba(23, 33, 43, 0.08);
+      vertical-align: top;
+      white-space: nowrap;
+    }
+    th {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 700;
+      background: rgba(255,255,255,0.84);
+    }
+    td strong { font-size: 14px; }
+    .table-note {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
     .factor {
       padding: 14px 16px;
       border-radius: 16px;
@@ -469,6 +503,25 @@
               <div class="box-foot">Wins = user lost; losses = user won.</div>
             </div>
           </div>
+          <div class="table-note">Recent routed trades where our payout beat the platform payout at creation time. PnL appears after settlement.</div>
+          <div class="trade-table-wrap">
+            <div class="subtle" style="padding:14px 16px;" id="stream-trades-empty">No routed BTC 30s trades yet.</div>
+            <table id="stream-trades-table" style="display:none;">
+              <thead>
+                <tr>
+                  <th>Created</th>
+                  <th>Side</th>
+                  <th>Amount</th>
+                  <th>Platform</th>
+                  <th>Ours</th>
+                  <th>Delta</th>
+                  <th>Status</th>
+                  <th>PnL</th>
+                </tr>
+              </thead>
+              <tbody id="stream-trades-body"></tbody>
+            </table>
+          </div>
         </article>
       </div>
 
@@ -532,6 +585,15 @@
 
     function formatPct(value, digits = 2) {
       return Number.isFinite(value) ? `${Number(value).toFixed(digits)}%` : "-";
+    }
+
+    function formatMoney(value, digits = 2) {
+      return Number.isFinite(value) ? `${Number(value) >= 0 ? "+" : "-"}${Math.abs(Number(value)).toFixed(digits)}` : "-";
+    }
+
+    function formatDateTime(value) {
+      const ts = typeof value === "number" ? value : Date.parse(value || "");
+      return Number.isFinite(ts) ? new Date(ts).toLocaleString() : "-";
     }
 
     function chipClass(kind) {
@@ -601,6 +663,21 @@
       $("stream-competed").textContent = String(stream.competedTrades ?? 0);
       $("stream-settled").textContent = String(stream.settledTrades ?? 0);
       $("stream-winloss").textContent = `${stream.wins ?? 0} / ${stream.losses ?? 0}`;
+      const recentTrades = Array.isArray(stream.recentTrades) ? stream.recentTrades : [];
+      $("stream-trades-body").innerHTML = recentTrades.map((trade) => `
+        <tr>
+          <td><strong>${formatDateTime(trade.createdAtText || trade.createdAtMs)}</strong></td>
+          <td>${trade.side || "-"}</td>
+          <td>${formatNum(trade.amount, 2)}</td>
+          <td>${formatNum(trade.actualPayout, 2)}</td>
+          <td>${formatNum(trade.ourPayout, 2)}</td>
+          <td>${formatNum(trade.payoutDelta, 2)}</td>
+          <td>${trade.outcome || trade.statusText || "-"}</td>
+          <td>${trade.pnl == null ? "-" : formatMoney(trade.pnl, 2)}</td>
+        </tr>
+      `).join("");
+      $("stream-trades-table").style.display = recentTrades.length ? "" : "none";
+      $("stream-trades-empty").style.display = recentTrades.length ? "none" : "";
 
       $("raw-state").textContent = JSON.stringify({
         quote,

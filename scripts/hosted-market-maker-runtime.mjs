@@ -144,6 +144,7 @@ const state = {
     losses: 0,
     lastTradeTs: null,
     openRoutedTrades: 0,
+    recentTrades: [],
   },
   diagnostics: {
     lastError: null,
@@ -265,6 +266,24 @@ function summarizeRegime(probability) {
 }
 
 function broadcastState() {
+  state.publicTradeMonitor.recentTrades = [...routedById.values()]
+    .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0))
+    .slice(0, 25)
+    .map((trade) => ({
+      id: trade.id,
+      side: trade.side,
+      amount: trade.amount,
+      actualPayout: trade.actualPayout,
+      ourPayout: trade.ourPayout,
+      payoutDelta: trade.payoutDelta,
+      statusText: trade.statusText,
+      outcome: trade.outcome,
+      pnl: trade.pnl,
+      createdAtMs: trade.createdAtMs,
+      createdAtText: trade.createdAtText,
+      settledAtText: trade.settledAtText,
+      settled: trade.settled,
+    }));
   const payload = `data: ${JSON.stringify(state)}\n\n`;
   for (const res of sseClients) {
     try {
@@ -378,24 +397,44 @@ function processTradeMessage(msg) {
       id: tradeId,
       side,
       amount,
+      actualPayout,
       ourPayout,
+      payoutDelta: ourPayout - actualPayout,
+      createdAtMs,
+      createdAtText: trade.created_at || null,
       settled: false,
+      statusText,
+      outcome: "Open",
+      pnl: null,
+      settledAtText: null,
     });
     state.publicTradeMonitor.competedTrades += 1;
     state.publicTradeMonitor.competedVolume += amount;
   }
 
   const routed = routedById.get(tradeId);
+  if (routed) {
+    routed.statusText = statusText;
+  }
   if (routed && !routed.settled && statusText === "Finished") {
     const userWon = computeUserWonFromTrade(trade);
     if (userWon === true) {
-      state.publicTradeMonitor.ourPnl += -(routed.amount * routed.ourPayout / 100);
+      const pnl = -(routed.amount * routed.ourPayout / 100);
+      state.publicTradeMonitor.ourPnl += pnl;
       state.publicTradeMonitor.losses += 1;
+      routed.pnl = pnl;
+      routed.outcome = "User Won";
     } else if (userWon === false) {
-      state.publicTradeMonitor.ourPnl += routed.amount;
+      const pnl = routed.amount;
+      state.publicTradeMonitor.ourPnl += pnl;
       state.publicTradeMonitor.wins += 1;
+      routed.pnl = pnl;
+      routed.outcome = "User Lost";
+    } else {
+      routed.outcome = "Finished";
     }
     routed.settled = true;
+    routed.settledAtText = trade.updated_at || null;
     state.publicTradeMonitor.settledTrades += 1;
   }
 
