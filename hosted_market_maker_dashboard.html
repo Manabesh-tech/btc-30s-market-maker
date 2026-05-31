@@ -250,10 +250,6 @@
       font-size: 12px;
       line-height: 1.45;
     }
-    .debug-card {
-      padding: 20px 22px;
-      margin-top: 18px;
-    }
     .control-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -319,17 +315,6 @@
       font-size: 12px;
       color: var(--muted);
       line-height: 1.4;
-    }
-    pre {
-      margin: 0;
-      background: #1e252b;
-      color: #f3f5f6;
-      padding: 14px;
-      border-radius: 16px;
-      overflow: auto;
-      font-size: 12px;
-      line-height: 1.55;
-      max-height: 360px;
     }
     @media (max-width: 1180px) {
       .hero, .quote-grid { grid-template-columns: 1fr; }
@@ -568,10 +553,6 @@
         </div>
       </section>
 
-      <section class="debug-card">
-        <h2>Runtime Diagnostics</h2>
-        <pre id="raw-state">Loading...</pre>
-      </section>
     </section>
   </div>
 
@@ -614,7 +595,6 @@
       const platform = state.platformQuote || {};
       const stream = state.publicTradeMonitor || {};
       const feed = state.feed || {};
-      const diag = state.diagnostics || {};
 
       $("hero-prob").textContent = formatPct((quote.displayProbability || 0) * 100, 2);
       $("hero-window").textContent = quote.windowStartTs ? new Date(quote.windowStartTs).toLocaleTimeString() : "-";
@@ -678,16 +658,6 @@
       `).join("");
       $("stream-trades-table").style.display = recentTrades.length ? "" : "none";
       $("stream-trades-empty").style.display = recentTrades.length ? "none" : "";
-
-      $("raw-state").textContent = JSON.stringify({
-        quote,
-        platformQuote: platform,
-        publicTradeMonitor: stream,
-        feed,
-        featureVector: state.featureVector,
-        diagnostics: diag,
-        calibration: state.calibration,
-      }, null, 2);
     }
 
     async function postJson(url, payload) {
