@@ -11,6 +11,11 @@ const DEFAULT_EDGE = 4.0;
 const DEFAULT_MODE = "phase1";
 const DEFAULT_PAIR_FILTER = "all";
 const STORAGE_KEY = "tf-3m-console-state-v1";
+const HOSTED_STATE_URL = "/api/3m/state";
+const HOSTED_SETTINGS_URL = "/api/3m/settings";
+const HOSTED_SETTINGS_RESET_URL = "/api/3m/settings/reset";
+const HOSTED_MONITOR_RESET_URL = "/api/3m/monitor/reset";
+const HOSTED_EVENTS_URL = "/events/3m";
 
 const PAIRS = [
   {
@@ -78,6 +83,10 @@ const state = {
       losses: 0,
     }])),
   },
+  quotes: {},
+  hosted: {
+    enabled: false,
+  },
 };
 
 let platformSocket = null;
@@ -86,6 +95,7 @@ let platformPollHandle = null;
 const ourQuoteHistory = Object.fromEntries(PAIRS.map((pair) => [pair.pairName, []]));
 const seenTradeIds = new Set();
 const routedById = new Map();
+let hostedEventSource = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -166,20 +176,40 @@ function parseMaybeJson(value) {
   }
 }
 
+function isHostedThreeMinRoute() {
+  return window.location.pathname === "/3m" || window.location.pathname === "/3m/" || window.location.pathname === "/3m/index.html";
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: payload ? JSON.stringify(payload) : "",
+  });
+  return response.json();
+}
+
 function saveControls() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.controls));
+  const payload = state.hosted.enabled
+    ? { pairFilter: state.controls.pairFilter }
+    : state.controls;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
 function loadControls() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-    state.controls.edge = Number.isFinite(Number(saved.edge)) ? clamp(Number(saved.edge), 0, 20) : DEFAULT_EDGE;
-    state.controls.mode = saved.mode === "empirical" ? "empirical" : DEFAULT_MODE;
     state.controls.pairFilter = saved.pairFilter || DEFAULT_PAIR_FILTER;
+    if (!state.hosted.enabled) {
+      state.controls.edge = Number.isFinite(Number(saved.edge)) ? clamp(Number(saved.edge), 0, 20) : DEFAULT_EDGE;
+      state.controls.mode = saved.mode === "empirical" ? "empirical" : DEFAULT_MODE;
+    }
   } catch {
-    state.controls.edge = DEFAULT_EDGE;
-    state.controls.mode = DEFAULT_MODE;
     state.controls.pairFilter = DEFAULT_PAIR_FILTER;
+    if (!state.hosted.enabled) {
+      state.controls.edge = DEFAULT_EDGE;
+      state.controls.mode = DEFAULT_MODE;
+    }
   }
 }
 
@@ -189,6 +219,19 @@ function syncControlInputs() {
   document.querySelectorAll(".mode-button").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === state.controls.mode);
   });
+}
+
+function attachHostedState(payload) {
+  state.hosted.enabled = true;
+  state.controls.edge = Number.isFinite(Number(payload?.controls?.edge)) ? clamp(Number(payload.controls.edge), 0, 20) : state.controls.edge;
+  state.controls.mode = payload?.controls?.mode === "empirical" ? "empirical" : DEFAULT_MODE;
+  state.market = payload?.market || state.market;
+  state.platform = payload?.platform || state.platform;
+  state.binance = payload?.binance || state.binance;
+  state.monitor = payload?.monitor || state.monitor;
+  state.quotes = payload?.quotes || {};
+  syncControlInputs();
+  saveControls();
 }
 
 function resetMonitorState() {
@@ -479,6 +522,9 @@ function connectBinanceSocket() {
 }
 
 function signalForPair(pair) {
+  if (state.hosted.enabled && state.quotes[pair.pairName]?.signal) {
+    return state.quotes[pair.pairName].signal;
+  }
   const market = state.market[pair.pairName];
   if (!market.mid || !market.history.length) {
     return { ready: false, reason: "Waiting for live price history." };
@@ -523,6 +569,9 @@ function signalForPair(pair) {
 }
 
 function quoteForPair(pair) {
+  if (state.hosted.enabled && state.quotes[pair.pairName]) {
+    return state.quotes[pair.pairName];
+  }
   const signal = signalForPair(pair);
   if (!signal.ready || signal.dangerousSide === "None") {
     const neutralPayout = clamp(payoutForProbability(0.5, state.controls.edge), PAYOUT_FLOOR, PAYOUT_CAP);
@@ -1109,6 +1158,23 @@ function render() {
 }
 
 function resetControls() {
+  if (state.hosted.enabled) {
+    state.controls.pairFilter = DEFAULT_PAIR_FILTER;
+    saveControls();
+    syncControlInputs();
+    postJson(HOSTED_SETTINGS_RESET_URL)
+      .then((result) => {
+        if (result?.ok) {
+          state.controls.edge = Number(result.edge ?? DEFAULT_EDGE);
+          state.controls.mode = result.mode === "empirical" ? "empirical" : DEFAULT_MODE;
+          syncControlInputs();
+          render();
+        }
+      })
+      .catch(() => {});
+    render();
+    return;
+  }
   state.controls.edge = DEFAULT_EDGE;
   state.controls.mode = DEFAULT_MODE;
   state.controls.pairFilter = DEFAULT_PAIR_FILTER;
@@ -1119,11 +1185,16 @@ function resetControls() {
 }
 
 function bindEvents() {
-  $("edge-input").addEventListener("input", () => {
+  $("edge-input").addEventListener(state.hosted.enabled ? "change" : "input", () => {
     const value = Number($("edge-input").value);
     if (!Number.isFinite(value)) return;
     state.controls.edge = clamp(value, 0, 20);
     saveControls();
+    if (state.hosted.enabled) {
+      postJson(HOSTED_SETTINGS_URL, { edge: state.controls.edge, mode: state.controls.mode }).catch(() => {});
+      render();
+      return;
+    }
     recordOurQuoteSnapshots();
     render();
   });
@@ -1139,12 +1210,28 @@ function bindEvents() {
       state.controls.mode = button.dataset.mode === "empirical" ? "empirical" : "phase1";
       saveControls();
       syncControlInputs();
+      if (state.hosted.enabled) {
+        postJson(HOSTED_SETTINGS_URL, { edge: state.controls.edge, mode: state.controls.mode }).catch(() => {});
+        render();
+        return;
+      }
       recordOurQuoteSnapshots();
       render();
     });
   });
 
   $("refresh-btn").addEventListener("click", async () => {
+    if (state.hosted.enabled) {
+      try {
+        const response = await fetch(HOSTED_STATE_URL, { cache: "no-store" });
+        attachHostedState(await response.json());
+      } catch (error) {
+        state.platform.status = "error";
+        state.platform.note = `Refresh failed: ${error.message}`;
+      }
+      render();
+      return;
+    }
     await Promise.all([fetchPlatformConfig(), seedAllHistory()]);
     render();
   });
@@ -1154,13 +1241,45 @@ function bindEvents() {
   });
 
   $("monitor-reset-btn").addEventListener("click", () => {
+    if (state.hosted.enabled) {
+      postJson(HOSTED_MONITOR_RESET_URL)
+        .then(() => {})
+        .catch(() => {});
+      return;
+    }
     resetMonitorState();
     recordOurQuoteSnapshots();
     render();
   });
 }
 
+async function initHostedMode() {
+  state.hosted.enabled = true;
+  loadControls();
+  bindEvents();
+  render();
+
+  const response = await fetch(HOSTED_STATE_URL, { cache: "no-store" });
+  attachHostedState(await response.json());
+  render();
+
+  hostedEventSource = new EventSource(HOSTED_EVENTS_URL);
+  hostedEventSource.onmessage = (event) => {
+    attachHostedState(JSON.parse(event.data));
+    render();
+  };
+  hostedEventSource.onerror = () => {
+    state.monitor.status = "Reconnecting";
+    state.monitor.note = "Lost connection to hosted 3m stream. Waiting to reconnect.";
+    render();
+  };
+}
+
 async function init() {
+  if (isHostedThreeMinRoute()) {
+    await initHostedMode();
+    return;
+  }
   loadControls();
   resetMonitorState();
   syncControlInputs();

@@ -76,6 +76,48 @@ const defaultSettings = {
   requireBinance: true,
   favoredPayoutFloor: 65.0,
 };
+const FLOOR_PAYOUT = 65.0;
+
+const THREE_MIN_DEFAULTS = {
+  edgePct: 4.0,
+  mode: "phase1",
+};
+
+const THREE_MIN_PAIRS = [
+  {
+    pairName: "BTC/USDT",
+    symbol: "BTCUSDT",
+    pairId: "6",
+    lookbackMin: 3,
+    bucketEdges: [5, 10, 15, 20],
+    phase1DangerProb: [0.525, 0.54, 0.555, 0.57, 0.58],
+    empiricalDangerProb: [0.5484, 0.5674, 0.5804, 0.6, 0.5851],
+    meanReversionSharePct: [61.37, 75.74, 81.71, 81.1, 80.92],
+    meanReversionWinPct: [54.84, 56.74, 58.04, 60.0, 58.51],
+  },
+  {
+    pairName: "ETH/USDT",
+    symbol: "ETHUSDT",
+    pairId: "5",
+    lookbackMin: 3,
+    bucketEdges: [5, 10, 15, 20],
+    phase1DangerProb: [0.52, 0.53, 0.54, 0.55, 0.56],
+    empiricalDangerProb: [0.5419, 0.5505, 0.4942, 0.5429, 0.577],
+    meanReversionSharePct: [62.98, 79.77, 84.21, 86.63, 86.36],
+    meanReversionWinPct: [54.19, 55.05, 49.42, 54.29, 57.7],
+  },
+];
+
+function emptyThreeMinPairMonitor() {
+  return {
+    competedTrades: 0,
+    settledTrades: 0,
+    competedVolume: 0,
+    ourPnl: 0,
+    wins: 0,
+    losses: 0,
+  };
+}
 
 const fittedMidModel = JSON.parse(
   fs.readFileSync(path.join(ROOT, "live_mid_model_30s_best_trade_model.json"), "utf8"),
@@ -153,6 +195,49 @@ const state = {
   },
 };
 
+const threeMinState = {
+  startedAt: new Date().toISOString(),
+  hosted: true,
+  controls: {
+    edge: THREE_MIN_DEFAULTS.edgePct,
+    mode: THREE_MIN_DEFAULTS.mode,
+  },
+  platform: {
+    status: "poll",
+    note: "Waiting for public config",
+    lastUpdateTs: null,
+    socketStatus: "polling",
+    pairs: {},
+  },
+  binance: {
+    status: "Connecting",
+    note: "Seeding recent 1m closes",
+    lastUpdateTs: null,
+  },
+  market: Object.fromEntries(THREE_MIN_PAIRS.map((pair) => [pair.pairName, {
+    mid: null,
+    spreadBps: null,
+    lastUpdateTs: null,
+  }])),
+  quotes: {},
+  monitor: {
+    status: "Connecting",
+    note: "Waiting for public 3m trade feed",
+    startedAtTs: Date.now(),
+    lastTradeTs: null,
+    seenTrades: 0,
+    competedTrades: 0,
+    settledTrades: 0,
+    openRoutedTrades: 0,
+    competedVolume: 0,
+    ourPnl: 0,
+    wins: 0,
+    losses: 0,
+    pairs: Object.fromEntries(THREE_MIN_PAIRS.map((pair) => [pair.pairName, emptyThreeMinPairMonitor()])),
+    recentTrades: [],
+  },
+};
+
 let quoteWindowStartTs = null;
 let lastFeedSign = 0;
 let lastFeedSignTime = null;
@@ -165,6 +250,12 @@ const quoteHistory = [];
 const seenTradeIds = new Set();
 const routedById = new Map();
 const sseClients = new Set();
+const threeMinHistoryByPair = Object.fromEntries(THREE_MIN_PAIRS.map((pair) => [pair.pairName, []]));
+const threeMinQuoteHistoryByPair = Object.fromEntries(THREE_MIN_PAIRS.map((pair) => [pair.pairName, []]));
+const threeMinSeenTradeIds = new Set();
+const threeMinRoutedById = new Map();
+const threeMinSseClients = new Set();
+let threeMinMarketTimer = null;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -358,6 +449,262 @@ function tradeSideLabel(side) {
   return "UNKNOWN";
 }
 
+function tradeSideLabelThreeMin(side) {
+  if (Number(side) === 1) return "Higher";
+  if (Number(side) === 2) return "Lower";
+  return "Unknown";
+}
+
+function buildBucketLabels(edges) {
+  const labels = [];
+  let lower = 0;
+  for (const edge of edges) {
+    labels.push(`${lower}-${edge}`);
+    lower = edge;
+  }
+  labels.push(`${edges[edges.length - 1]}+`);
+  return labels;
+}
+
+function bucketIndex(absMoveBps, edges) {
+  for (let i = 0; i < edges.length; i += 1) {
+    if (absMoveBps < edges[i]) return i;
+  }
+  return edges.length;
+}
+
+function upsertThreeMinHistoryPoint(pairName, ts, mid, spreadBps) {
+  const market = threeMinState.market[pairName];
+  if (!market) return;
+  market.mid = mid;
+  market.spreadBps = spreadBps;
+  market.lastUpdateTs = ts;
+  const history = threeMinHistoryByPair[pairName];
+  const last = history[history.length - 1];
+  if (last && Math.abs(last.ts - ts) < 250) {
+    last.mid = mid;
+    last.spreadBps = spreadBps;
+  } else {
+    history.push({ ts, mid, spreadBps });
+  }
+  const cutoff = ts - (15 * 60 * 1000);
+  while (history.length && history[0].ts < cutoff) {
+    history.shift();
+  }
+}
+
+function pointAtOrBeforeThreeMin(history, targetTs) {
+  let best = null;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    if (history[i].ts <= targetTs) {
+      best = history[i];
+      break;
+    }
+  }
+  return best;
+}
+
+function signalForThreeMinPair(pair) {
+  const market = threeMinState.market[pair.pairName];
+  const history = threeMinHistoryByPair[pair.pairName];
+  if (!market?.mid || !history.length) {
+    return { ready: false, reason: "Waiting for live price history." };
+  }
+  const nowTs = market.lastUpdateTs || Date.now();
+  const lookbackTs = nowTs - (pair.lookbackMin * 60 * 1000);
+  const anchor = pointAtOrBeforeThreeMin(history, lookbackTs);
+  if (!anchor || !Number.isFinite(anchor.mid) || anchor.mid <= 0) {
+    return { ready: false, reason: "Not enough history to compute the full 3m move." };
+  }
+  const moveBps = Math.log(market.mid / anchor.mid) * 10000;
+  const absMoveBps = Math.abs(moveBps);
+  const index = bucketIndex(absMoveBps, pair.bucketEdges);
+  const labels = buildBucketLabels(pair.bucketEdges);
+  const bucket = labels[index];
+  const dangerousSide = moveBps > 0 ? "Lower" : moveBps < 0 ? "Higher" : "None";
+  const favoredSide = dangerousSide === "Lower" ? "Higher" : dangerousSide === "Higher" ? "Lower" : "Neutral";
+  const probs = threeMinState.controls.mode === "empirical" ? pair.empiricalDangerProb : pair.phase1DangerProb;
+  return {
+    ready: true,
+    moveBps,
+    absMoveBps,
+    bucket,
+    bucketIndex: index,
+    dangerousSide,
+    favoredSide,
+    dangerousProb: probs[index],
+    dangerousWinPct: pair.meanReversionWinPct[index],
+    dangerSharePct: pair.meanReversionSharePct[index],
+    anchorMid: anchor.mid,
+    currentMid: market.mid,
+    spreadBps: market.spreadBps,
+    lookbackMin: pair.lookbackMin,
+  };
+}
+
+function computeThreeMinQuote(pair) {
+  const signal = signalForThreeMinPair(pair);
+  if (!signal.ready || signal.dangerousSide === "None") {
+    const neutralPayout = clamp(payoutForProbability(0.5, threeMinState.controls.edge), FLOOR_PAYOUT, 105);
+    return {
+      signal,
+      ready: false,
+      higherPayout: neutralPayout,
+      lowerPayout: neutralPayout,
+      favoredSide: "Neutral",
+      dangerousSide: "None",
+      higherProb: 0.5,
+      lowerProb: 0.5,
+      dangerPayout: neutralPayout,
+      safePayout: neutralPayout,
+      note: signal.reason || "Neutral fallback.",
+    };
+  }
+
+  const dangerousProb = clamp(signal.dangerousProb, 0.5001, 0.70);
+  const safeProb = 1 - dangerousProb;
+  const dangerPayout = clamp(payoutForProbability(dangerousProb, threeMinState.controls.edge), FLOOR_PAYOUT, 105);
+  const safePayout = clamp(payoutForProbability(safeProb, threeMinState.controls.edge), FLOOR_PAYOUT, 105);
+
+  let higherPayout = safePayout;
+  let lowerPayout = safePayout;
+  let higherProb = safeProb;
+  let lowerProb = safeProb;
+
+  if (signal.dangerousSide === "Higher") {
+    higherPayout = dangerPayout;
+    higherProb = dangerousProb;
+    lowerPayout = safePayout;
+    lowerProb = safeProb;
+  } else if (signal.dangerousSide === "Lower") {
+    higherPayout = safePayout;
+    higherProb = safeProb;
+    lowerPayout = dangerPayout;
+    lowerProb = dangerousProb;
+  }
+
+  return {
+    signal,
+    ready: true,
+    favoredSide: signal.favoredSide,
+    dangerousSide: signal.dangerousSide,
+    higherPayout,
+    lowerPayout,
+    higherProb,
+    lowerProb,
+    dangerPayout,
+    safePayout,
+    note: `${pair.pairName} ${signal.bucket} bucket, ${threeMinState.controls.mode === "empirical" ? "Raw Backtest" : "Phase 1"} schedule.`,
+  };
+}
+
+function upsertThreeMinQuoteSnapshot(pairName, snapshot) {
+  const history = threeMinQuoteHistoryByPair[pairName];
+  const last = history[history.length - 1];
+  if (
+    last &&
+    last.active === snapshot.active &&
+    last.higherPayout === snapshot.higherPayout &&
+    last.lowerPayout === snapshot.lowerPayout &&
+    last.mode === snapshot.mode &&
+    last.edge === snapshot.edge &&
+    last.bucket === snapshot.bucket &&
+    last.dangerousSide === snapshot.dangerousSide
+  ) {
+    return;
+  }
+  history.push(snapshot);
+  if (history.length > 20000) {
+    history.splice(0, history.length - 20000);
+  }
+}
+
+function threeMinQuoteSnapshotForTrade(pairName, tsMs) {
+  const history = threeMinQuoteHistoryByPair[pairName];
+  if (!history?.length || !Number.isFinite(tsMs)) return null;
+  let lo = 0;
+  let hi = history.length - 1;
+  let best = null;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const item = history[mid];
+    if (item.ts_ms <= tsMs) {
+      best = item;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
+function broadcastThreeMinState() {
+  threeMinState.monitor.recentTrades = [...threeMinRoutedById.values()]
+    .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0))
+    .slice(0, 25)
+    .map((trade) => ({
+      id: trade.id,
+      pairName: trade.pairName,
+      side: trade.side,
+      amount: trade.amount,
+      actualPayout: trade.actualPayout,
+      ourPayout: trade.ourPayout,
+      payoutDelta: trade.payoutDelta,
+      statusText: trade.statusText,
+      outcome: trade.outcome,
+      pnl: trade.pnl,
+      createdAtMs: trade.createdAtMs,
+      createdAtText: trade.createdAtText,
+      settledAtText: trade.settledAtText,
+      settled: trade.settled,
+    }));
+  const payload = `data: ${JSON.stringify(threeMinState)}\n\n`;
+  for (const res of threeMinSseClients) {
+    try {
+      res.write(payload);
+    } catch {
+      threeMinSseClients.delete(res);
+    }
+  }
+}
+
+function recomputeThreeMinQuotes() {
+  for (const pair of THREE_MIN_PAIRS) {
+    const quote = computeThreeMinQuote(pair);
+    threeMinState.quotes[pair.pairName] = quote;
+    const tsMs = threeMinState.market[pair.pairName]?.lastUpdateTs || Date.now();
+    upsertThreeMinQuoteSnapshot(pair.pairName, {
+      ts_ms: tsMs,
+      active: Boolean(quote.ready),
+      higherPayout: Number.isFinite(quote.higherPayout) ? Number(quote.higherPayout.toFixed(4)) : null,
+      lowerPayout: Number.isFinite(quote.lowerPayout) ? Number(quote.lowerPayout.toFixed(4)) : null,
+      bucket: quote.signal?.bucket || null,
+      dangerousSide: quote.dangerousSide,
+      mode: threeMinState.controls.mode,
+      edge: Number(threeMinState.controls.edge.toFixed(4)),
+    });
+  }
+}
+
+function resetThreeMinMonitorState() {
+  threeMinSeenTradeIds.clear();
+  threeMinRoutedById.clear();
+  threeMinState.monitor.status = "Connecting";
+  threeMinState.monitor.note = "Waiting for public 3m trade feed";
+  threeMinState.monitor.startedAtTs = Date.now();
+  threeMinState.monitor.lastTradeTs = null;
+  threeMinState.monitor.seenTrades = 0;
+  threeMinState.monitor.competedTrades = 0;
+  threeMinState.monitor.settledTrades = 0;
+  threeMinState.monitor.openRoutedTrades = 0;
+  threeMinState.monitor.competedVolume = 0;
+  threeMinState.monitor.ourPnl = 0;
+  threeMinState.monitor.wins = 0;
+  threeMinState.monitor.losses = 0;
+  threeMinState.monitor.pairs = Object.fromEntries(THREE_MIN_PAIRS.map((pair) => [pair.pairName, emptyThreeMinPairMonitor()]));
+  threeMinState.monitor.recentTrades = [];
+}
+
 function computeUserWonFromTrade(trade) {
   const side = Number(trade.side);
   const entry = Number(trade.entry_price);
@@ -442,6 +789,179 @@ function processTradeMessage(msg) {
   return true;
 }
 
+function processThreeMinTradeMessage(msg) {
+  if (!msg || msg.group !== "dex_predict_market") return false;
+  const trade = typeof msg.data === "string" ? JSON.parse(msg.data) : msg.data;
+  if (!trade || Number(trade.duration) !== 180) return false;
+
+  const pairId = String(trade.pair_id ?? "");
+  const pair = THREE_MIN_PAIRS.find((item) => item.pairId === pairId);
+  if (!pair) return false;
+
+  const tradeId = String(trade.id ?? "");
+  if (!tradeId) return false;
+
+  threeMinState.monitor.status = "Live";
+  threeMinState.monitor.note = "Server-side hosted monitor is routing public 3m trades continuously.";
+  threeMinState.monitor.lastTradeTs = Date.now();
+
+  if (!threeMinSeenTradeIds.has(tradeId)) {
+    threeMinSeenTradeIds.add(tradeId);
+    threeMinState.monitor.seenTrades += 1;
+  }
+
+  const createdAtMs = Date.parse(trade.created_at || "");
+  const quote = threeMinQuoteSnapshotForTrade(pair.pairName, createdAtMs);
+  const actualPayout = Number(trade.return_rate) * 100;
+  const side = tradeSideLabelThreeMin(trade.side);
+  const ourPayout = side === "Higher" ? quote?.higherPayout : side === "Lower" ? quote?.lowerPayout : null;
+  const amount = Number(trade.usdt_value ?? trade.amount ?? 0);
+  const statusText = String(trade.order_status || "");
+
+  if (
+    !threeMinRoutedById.has(tradeId) &&
+    quote?.active &&
+    Number.isFinite(actualPayout) &&
+    Number.isFinite(ourPayout) &&
+    Number.isFinite(amount) &&
+    amount > 0 &&
+    ourPayout > actualPayout
+  ) {
+    threeMinRoutedById.set(tradeId, {
+      id: tradeId,
+      pairName: pair.pairName,
+      side,
+      amount,
+      actualPayout,
+      ourPayout,
+      payoutDelta: ourPayout - actualPayout,
+      createdAtMs,
+      createdAtText: trade.created_at || null,
+      settled: false,
+      statusText,
+      outcome: "Open",
+      pnl: null,
+      settledAtText: null,
+    });
+    threeMinState.monitor.competedTrades += 1;
+    threeMinState.monitor.competedVolume += amount;
+    threeMinState.monitor.pairs[pair.pairName].competedTrades += 1;
+    threeMinState.monitor.pairs[pair.pairName].competedVolume += amount;
+  }
+
+  const routed = threeMinRoutedById.get(tradeId);
+  if (routed) {
+    routed.statusText = statusText;
+  }
+  if (routed && !routed.settled && statusText === "Finished") {
+    const userWon = computeUserWonFromTrade(trade);
+    if (userWon === true) {
+      const pnl = -(routed.amount * routed.ourPayout / 100);
+      threeMinState.monitor.ourPnl += pnl;
+      threeMinState.monitor.losses += 1;
+      threeMinState.monitor.pairs[pair.pairName].ourPnl += pnl;
+      threeMinState.monitor.pairs[pair.pairName].losses += 1;
+      routed.pnl = pnl;
+      routed.outcome = "User Won";
+    } else if (userWon === false) {
+      const pnl = routed.amount;
+      threeMinState.monitor.ourPnl += pnl;
+      threeMinState.monitor.wins += 1;
+      threeMinState.monitor.pairs[pair.pairName].ourPnl += pnl;
+      threeMinState.monitor.pairs[pair.pairName].wins += 1;
+      routed.pnl = pnl;
+      routed.outcome = "User Lost";
+    } else {
+      routed.outcome = "Finished";
+    }
+    routed.settled = true;
+    routed.settledAtText = trade.updated_at || null;
+    threeMinState.monitor.settledTrades += 1;
+    threeMinState.monitor.pairs[pair.pairName].settledTrades += 1;
+  }
+
+  threeMinState.monitor.openRoutedTrades = [...threeMinRoutedById.values()].filter((entry) => !entry.settled).length;
+  return true;
+}
+
+async function fetchThreeMinKlines(pair) {
+  const response = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${pair.symbol}&interval=1m&limit=12`, {
+    cache: "no-store",
+    headers: { "user-agent": "btc-30s-market-maker-runtime/1.0", accept: "application/json" },
+  });
+  const rows = await response.json();
+  if (!Array.isArray(rows)) return;
+  for (const row of rows) {
+    const closeTime = Number(row[6]);
+    const close = Number(row[4]);
+    if (!Number.isFinite(closeTime) || !Number.isFinite(close)) continue;
+    upsertThreeMinHistoryPoint(pair.pairName, closeTime, close, 0);
+  }
+}
+
+async function seedThreeMinHistory() {
+  threeMinState.binance.status = "Seeding";
+  threeMinState.binance.note = "Loading recent 1m closes so the server can compute the 3m signal immediately.";
+  broadcastThreeMinState();
+  try {
+    await Promise.all(THREE_MIN_PAIRS.map((pair) => fetchThreeMinKlines(pair)));
+    recomputeThreeMinQuotes();
+    threeMinState.binance.status = "Seeded";
+    threeMinState.binance.note = "Recent closes loaded. Polling Binance bookTicker server-side.";
+  } catch (error) {
+    threeMinState.binance.status = "Error";
+    threeMinState.binance.note = `Seed failed: ${String(error)}`;
+  }
+  broadcastThreeMinState();
+}
+
+async function pollThreeMinMarket() {
+  try {
+    const responses = await Promise.all(THREE_MIN_PAIRS.map(async (pair) => {
+      const result = await fetchJsonWithTimeout(`https://fapi.binance.com/fapi/v1/ticker/bookTicker?symbol=${pair.symbol}`, 4000);
+      return { pair, result };
+    }));
+    for (const { pair, result } of responses) {
+      if (!result.ok) {
+        throw new Error(`${pair.symbol} HTTP ${result.status}`);
+      }
+      const bid = Number(result.payload?.bidPrice);
+      const ask = Number(result.payload?.askPrice);
+      const ts = Date.now();
+      if (!Number.isFinite(bid) || !Number.isFinite(ask) || bid <= 0 || ask <= 0) {
+        throw new Error(`${pair.symbol} returned invalid bookTicker payload`);
+      }
+      const mid = (bid + ask) / 2;
+      const spreadBps = ((ask - bid) / mid) * 10000;
+      upsertThreeMinHistoryPoint(pair.pairName, ts, mid, spreadBps);
+      threeMinState.binance.lastUpdateTs = ts;
+    }
+    recomputeThreeMinQuotes();
+    threeMinState.binance.status = "Live";
+    threeMinState.binance.note = "Server is polling Binance Futures bookTicker for BTC and ETH.";
+    broadcastThreeMinState();
+  } catch (error) {
+    threeMinState.binance.status = "Error";
+    threeMinState.binance.note = `Binance poll failed: ${String(error)}`;
+    broadcastThreeMinState();
+  }
+}
+
+function startThreeMinLoop() {
+  if (threeMinMarketTimer) clearInterval(threeMinMarketTimer);
+  pollThreeMinMarket();
+  threeMinMarketTimer = setInterval(pollThreeMinMarket, 2000);
+}
+
+function applyThreeMinSettings(input = {}) {
+  const nextEdge = clamp(Number(input.edge ?? threeMinState.controls.edge), 0, 20);
+  const nextMode = input.mode === "empirical" ? "empirical" : "phase1";
+  threeMinState.controls.edge = Number.isFinite(nextEdge) ? nextEdge : threeMinState.controls.edge;
+  threeMinState.controls.mode = nextMode;
+  recomputeThreeMinQuotes();
+  broadcastThreeMinState();
+}
+
 async function pullPlatformConfigQuote() {
   const response = await fetch(PLATFORM_CONFIG_URL, { cache: "no-store" });
   const payload = await response.json();
@@ -462,7 +982,26 @@ async function pullPlatformConfigQuote() {
     impliedEdgePct: impliedEdgeFromTwoWayQuote(Number(config30.bid_return_rate) * 100, Number(config30.ask_return_rate) * 100),
     lastUpdateTs: new Date().toISOString(),
   };
+  const threeMinPairs = {};
+  for (const pair of THREE_MIN_PAIRS) {
+    const item = pairList.find((row) => String(row?.pair_name || row?.pairName || "").toUpperCase() === pair.pairName.toUpperCase());
+    const config180 = item?.order_configs?.find((row) => Number(row?.duration) === 180);
+    if (!item || !config180) continue;
+    threeMinPairs[pair.pairName] = {
+      pairId: String(item?.pair_id || item?.pairId || pair.pairId),
+      higherPayout: Number(config180.bid_return_rate) * 100,
+      lowerPayout: Number(config180.ask_return_rate) * 100,
+      refreshIntervalSec: Number(payload?.data?.oracle_cfg?.refresh_interval || payload?.oracle_cfg?.refresh_interval || 2),
+      minPayout: FLOOR_PAYOUT,
+      maxPayout: 105,
+    };
+  }
+  threeMinState.platform.pairs = threeMinPairs;
+  threeMinState.platform.lastUpdateTs = Date.now();
+  threeMinState.platform.status = "poll";
+  threeMinState.platform.note = "REST config poll is keeping the 3m platform quotes updated.";
   broadcastState();
+  broadcastThreeMinState();
 }
 
 async function fetchJsonWithTimeout(url, timeoutMs = 4000) {
@@ -524,14 +1063,17 @@ function connectPlatformStream() {
   }
 
   state.publicTradeMonitor.status = "connecting";
+  threeMinState.monitor.status = "Connecting";
   platformSocket = new WebSocket(PLATFORM_WS_URL);
 
   platformSocket.onopen = () => {
     state.publicTradeMonitor.status = "connected";
+    threeMinState.monitor.status = "Connecting";
     platformSocket.send(JSON.stringify({ action: "subscribe", args: ["dex_predict_config"] }));
     platformSocket.send(JSON.stringify({ action: "subscribe", args: ["dex_predict_ticker"] }));
     platformSocket.send(JSON.stringify({ action: "subscribe", args: ["dex_predict_market"] }));
     broadcastState();
+    broadcastThreeMinState();
   };
 
   platformSocket.onmessage = (event) => {
@@ -541,6 +1083,10 @@ function connectPlatformStream() {
         broadcastState();
         return;
       }
+      if (processThreeMinTradeMessage(payload)) {
+        broadcastThreeMinState();
+        return;
+      }
     } catch (error) {
       state.diagnostics.lastError = String(error);
     }
@@ -548,13 +1094,19 @@ function connectPlatformStream() {
 
   platformSocket.onerror = (error) => {
     state.publicTradeMonitor.status = "error";
+    threeMinState.monitor.status = "Error";
+    threeMinState.monitor.note = "Public trade socket errored.";
     state.diagnostics.lastError = String(error?.message || error);
     broadcastState();
+    broadcastThreeMinState();
   };
 
   platformSocket.onclose = () => {
     state.publicTradeMonitor.status = "offline";
+    threeMinState.monitor.status = "Reconnecting";
+    threeMinState.monitor.note = "Public trade socket closed. Reconnecting.";
     broadcastState();
+    broadcastThreeMinState();
     setTimeout(connectPlatformStream, 2000);
   };
 }
@@ -760,6 +1312,10 @@ const server = http.createServer((req, res) => {
     sendJson(res, 200, state);
     return;
   }
+  if (req.url === "/api/3m/state") {
+    sendJson(res, 200, threeMinState);
+    return;
+  }
   if (req.url === "/api/settings" && req.method === "POST") {
     readRequestBody(req)
       .then((body) => {
@@ -789,6 +1345,37 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  if (req.url === "/api/3m/settings" && req.method === "POST") {
+    readRequestBody(req)
+      .then((body) => {
+        const payload = body ? JSON.parse(body) : {};
+        applyThreeMinSettings(payload);
+        sendJson(res, 200, {
+          ok: true,
+          edge: threeMinState.controls.edge,
+          mode: threeMinState.controls.mode,
+        });
+      })
+      .catch((error) => {
+        sendJson(res, 400, { ok: false, error: String(error) });
+      });
+    return;
+  }
+  if (req.url === "/api/3m/settings/reset" && req.method === "POST") {
+    applyThreeMinSettings(THREE_MIN_DEFAULTS);
+    sendJson(res, 200, {
+      ok: true,
+      edge: threeMinState.controls.edge,
+      mode: threeMinState.controls.mode,
+    });
+    return;
+  }
+  if (req.url === "/api/3m/monitor/reset" && req.method === "POST") {
+    resetThreeMinMonitorState();
+    broadcastThreeMinState();
+    sendJson(res, 200, { ok: true, startedAtTs: threeMinState.monitor.startedAtTs });
+    return;
+  }
   if (req.url === "/health") {
     sendJson(res, 200, { ok: true, startedAt: state.startedAt });
     return;
@@ -802,6 +1389,17 @@ const server = http.createServer((req, res) => {
     res.write(`data: ${JSON.stringify(state)}\n\n`);
     sseClients.add(res);
     req.on("close", () => sseClients.delete(res));
+    return;
+  }
+  if (req.url === "/events/3m") {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    });
+    res.write(`data: ${JSON.stringify(threeMinState)}\n\n`);
+    threeMinSseClients.add(res);
+    req.on("close", () => threeMinSseClients.delete(res));
     return;
   }
   sendJson(res, 404, { error: "not found" });
@@ -821,3 +1419,10 @@ platformConfigTimer = setInterval(() => {
 }, 2000);
 connectPlatformStream();
 startDepthLoop();
+resetThreeMinMonitorState();
+await seedThreeMinHistory().catch((error) => {
+  threeMinState.binance.status = "Error";
+  threeMinState.binance.note = `Seed failed: ${String(error)}`;
+  broadcastThreeMinState();
+});
+startThreeMinLoop();
