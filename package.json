@@ -1,0 +1,8 @@
+{
+  "name": "chainlink-product-suite-hosted",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Product Suite Console</title>
+    <style>
+      :root {
+        --bg: #f5efe5;
+        --panel: rgba(255, 252, 246, 0.9);
+        --border: rgba(29, 42, 68, 0.12);
+        --ink: #16233b;
+        --muted: #57657e;
+        --accent: #0b6e4f;
+        --warn: #a55d1d;
+        --shadow: 0 24px 60px rgba(19, 28, 45, 0.08);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        background:
+          radial-gradient(circle at top left, rgba(255,255,255,0.75), transparent 32%),
+          linear-gradient(160deg, #ede4d5 0%, #f7f2ea 40%, #efe6d7 100%);
+        color: var(--ink);
+      }
+      .shell {
+        max-width: 1440px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .hero {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: 1.2fr 0.8fr;
+        margin-bottom: 22px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+        padding: 22px;
+      }
+      h1, h2, h3, p { margin: 0; }
+      .eyebrow {
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      .hero h1 {
+        font-size: clamp(32px, 4vw, 54px);
+        line-height: 1;
+        margin-bottom: 10px;
+      }
+      .hero p {
+        color: var(--muted);
+        line-height: 1.5;
+        max-width: 70ch;
+      }
+      .controls {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      select, input, button {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+      }
+      input[type="number"] {
+        appearance: textfield;
+      }
+      input[type="number"]::-webkit-outer-spin-button,
+      input[type="number"]::-webkit-inner-spin-button {
+        appearance: none;
+        margin: 0;
+      }
+      button {
+        cursor: pointer;
+        font-weight: 700;
+        background: linear-gradient(135deg, #1f7a5a, #125d43);
+        color: #fff;
+      }
+      .button-stack {
+        display: grid;
+        gap: 10px;
+      }
+      .button-stack button.secondary {
+        background: #fff;
+        color: var(--ink);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 22px;
+      }
+      .metric {
+        background: rgba(255,255,255,0.75);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+      }
+      .metric .k {
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      .metric .v {
+        font-size: 28px;
+        font-weight: 700;
+      }
+      .signal-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        border-radius: 999px;
+        padding: 10px 14px;
+        background: rgba(22, 35, 59, 0.06);
+      }
+      .signal-pill--higher {
+        background: rgba(11, 110, 79, 0.14);
+        color: var(--accent);
+      }
+      .signal-pill--lower {
+        background: rgba(165, 93, 29, 0.14);
+        color: var(--warn);
+      }
+      .quote-split {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .quote-side {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 8px;
+        border-radius: 14px;
+        padding: 8px 12px;
+        background: rgba(22, 35, 59, 0.05);
+        color: var(--muted);
+      }
+      .quote-side strong {
+        font-size: 30px;
+        line-height: 1;
+      }
+      .quote-side small {
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .quote-side--win {
+        background: rgba(11, 110, 79, 0.14);
+        color: var(--accent);
+        box-shadow: inset 0 0 0 1px rgba(11, 110, 79, 0.16);
+      }
+      .quote-side--lose {
+        opacity: 0.72;
+      }
+      .quote-sep {
+        color: var(--muted);
+        font-size: 20px;
+      }
+      .metric .s {
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 18px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        text-align: left;
+        padding: 11px 10px;
+        border-bottom: 1px solid var(--border);
+        font-size: 14px;
+      }
+      th {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: rgba(11,110,79,0.1);
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .warn {
+        color: var(--warn);
+      }
+      .note {
+        margin-top: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+        font-size: 14px;
+      }
+      @media (max-width: 1100px) {
+        .hero, .two-col, .controls, .grid { grid-template-columns: 1fr 1fr; }
+      }
+      @media (max-width: 720px) {
+        .hero, .two-col, .controls, .grid { grid-template-columns: 1fr; }
+        .shell { padding: 16px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="hero">
+        <div class="panel">
+          <div class="eyebrow">Product Suite</div>
+          <h1>Hosted Product Suite Console</h1>
+          <p>
+            Switch between the `chainlink model` and the `turbo model` for `30s`, `1m`, `3m`, `5m`, `15m`, and `1h`.
+            It shows the live fair-mid estimate, active skew logic, public implied edge/skew, and the current two-way quote at the selected edge.
+            This hosted version keeps one shared runtime profile on the server, so changing the controls updates the page state for everyone on this URL.
+          </p>
+        </div>
+        <div class="panel">
+          <div class="eyebrow">Live Controls</div>
+          <div class="controls">
+            <div>
+              <label for="family-select">Model</label>
+              <select id="family-select">
+                <option value="chainlink">Chainlink model</option>
+                <option value="turbo">Turbo model</option>
+              </select>
+            </div>
+            <div>
+              <label for="pair-select">Pair</label>
+              <select id="pair-select"></select>
+            </div>
+            <div>
+              <label for="product-select">Product</label>
+              <select id="product-select"></select>
+            </div>
+            <div>
+              <label for="edge-input">Edge %</label>
+              <input id="edge-input" type="number" min="0" max="20" step="0.1" value="7.0" />
+            </div>
+            <div>
+              <label for="alpha-override">Our Alpha</label>
+              <select id="alpha-override">
+                <option value="auto">Auto</option>
+                <option value="0">0.00</option>
+                <option value="0.25">0.25</option>
+                <option value="0.5">0.50</option>
+                <option value="0.75">0.75</option>
+                <option value="1">1.00</option>
+                <option value="1.25">1.25</option>
+                <option value="1.5">1.50</option>
+              </select>
+            </div>
+            <div>
+              <label for="floor-input">Favored Payout Floor %</label>
+              <input id="floor-input" type="number" min="30" max="120" step="1" placeholder="Auto from config" />
+            </div>
+            <div>
+              <label for="apply-runtime-btn">Runtime</label>
+              <div class="button-stack">
+                <button id="apply-runtime-btn">Apply Hosted Values</button>
+                <button id="reset-runtime-btn" class="secondary">Reset Defaults</button>
+              </div>
+            </div>
+            <div>
+              <label for="refresh-btn">Models</label>
+              <button id="refresh-btn">Reload Model Files</button>
+            </div>
+          </div>
+          <div class="note" id="controls-note">
+            Waiting for runtime settings.
+          </div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="metric">
+          <div class="k">Signal</div>
+          <div class="v" id="signal-side">-</div>
+          <div class="s" id="signal-note">Waiting for live prices.</div>
+        </div>
+        <div class="metric">
+          <div class="k">Our Quote</div>
+          <div class="v" id="our-quote">-</div>
+          <div class="s" id="our-quote-note">Higher / Lower payouts</div>
+        </div>
+        <div class="metric">
+          <div class="k">Platform Quote</div>
+          <div class="v" id="platform-quote">-</div>
+          <div class="s" id="platform-quote-note">Current public stream</div>
+        </div>
+        <div class="metric">
+          <div class="k">Model Prob</div>
+          <div class="v" id="model-prob">-</div>
+          <div class="s" id="model-prob-note">Raw and adjusted</div>
+        </div>
+      </section>
+
+      <section class="two-col">
+        <div class="panel">
+          <div class="eyebrow">Live State</div>
+          <table>
+            <tbody>
+              <tr><th>Primary Feed</th><td id="chainlink-mid">-</td></tr>
+              <tr><th>Binance Spot</th><td id="spot-mid">-</td></tr>
+              <tr><th>Binance Perp</th><td id="perp-mid">-</td></tr>
+              <tr><th>Gap vs Spot</th><td id="gap-spot">-</td></tr>
+              <tr><th>Gap vs Perp</th><td id="gap-perp">-</td></tr>
+              <tr><th>Spot-Perp Spread</th><td id="spot-perp-spread">-</td></tr>
+              <tr><th>Platform Edge</th><td id="platform-edge">-</td></tr>
+              <tr><th>Platform Mid</th><td id="platform-mid">-</td></tr>
+              <tr><th>Platform Skew</th><td id="platform-skew">-</td></tr>
+              <tr><th>Our Fair Mid</th><td id="our-fair-mid">-</td></tr>
+              <tr><th>Structural Spot Gap</th><td id="struct-spot">-</td></tr>
+              <tr><th>Structural Perp Gap</th><td id="struct-perp">-</td></tr>
+              <tr><th>Last Update</th><td id="last-update">-</td></tr>
+              <tr><th>Page Time</th><td id="page-time">-</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <div class="eyebrow">Model</div>
+          <div class="status" id="model-status">Loading config</div>
+          <div class="note" id="model-summary"></div>
+          <div class="note" id="alpha-summary"></div>
+          <div class="note" id="feed-summary"></div>
+        </div>
+      </section>
+
+      <section class="panel" style="margin-top:18px;">
+        <div class="eyebrow">Feature Vector</div>
+        <table>
+          <thead>
+            <tr><th>Feature</th><th>Value</th><th>Comment</th></tr>
+          </thead>
+          <tbody id="feature-body"></tbody>
+        </table>
+      </section>
+    </div>
+    <script src="./live_chainlink_product_suite_console.js?v=20260606-hosted"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "modelFamily": "chainlink",
+  "selectedPair": "BTC/USDT",
+  "selectedProduct": "30s",
+  "edgePct": 7,
+  "alphaOverride": null,
+  "payoutFloorOverride": null,
+  "updatedAt": 1780722161246
+}

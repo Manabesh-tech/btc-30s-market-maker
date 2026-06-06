@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: chainlink-product-suite-console
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
