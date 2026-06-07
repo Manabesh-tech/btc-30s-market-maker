@@ -12,16 +12,21 @@ const ROOT = __dirname;
 const PORT = Number(process.env.PORT || 8787);
 const execFileAsync = promisify(execFile);
 const RUNTIME_STATE_PATH = process.env.RUNTIME_STATE_PATH || path.join(ROOT, "runtime_settings.json");
-
+const PYTHON_CANDIDATES = [
+  process.env.PYTHON_BIN,
+  process.env.PYTHON,
+  process.env.CONDA_PYTHON_EXE,
+  "python3",
+  "python",
+  "py",
+].filter(Boolean);
 const API_KEY = process.env.CHAINLINK_API_KEY || "1cc69e78-85fb-4c1f-b36c-6b55e69c1865";
 const USER_SECRET = process.env.CHAINLINK_USER_SECRET || "Wz5NRTA1GbSQw04oE7s8Ug1go18pse01yddl7VNSOLxyr9ltkMw3K3HFDLLI9g5lH3x823tyqvzTHUI3BG07hy7MFVbsR9uq6MK9327X9e2rVEN5iCZ3OsQ77ARtHB51";
 const BASE_URL = "https://api.dataengine.chain.link";
-
 const FEEDS = {
   "BTC/USDT": "0x00039d9e45394f473ab1f050a1b963e6b05351e52d71e507509ada0c95ed75b8",
   "ETH/USDT": "0x000362205e10b3a147d02792eccee483dca6c7b44ecce7012cb8c6e0b68b3ae9",
 };
-
 const SYMBOLS = {
   "BTC/USDT": "BTCUSDT",
   "ETH/USDT": "ETHUSDT",
@@ -62,6 +67,20 @@ const MIME_TYPES = {
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
 };
+
+function resolvePythonCommand() {
+  for (const candidate of PYTHON_CANDIDATES) {
+    if (candidate === "python3" || candidate === "python" || candidate === "py") {
+      return candidate;
+    }
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return "python3";
+}
+
+const PYTHON_CMD = resolvePythonCommand();
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -245,7 +264,10 @@ with psycopg2.connect(**db) as conn:
         ts_utc, price = row
         print(json.dumps({"pair": pair, "price": price, "ts": int(ts_utc.timestamp() * 1000)}))
 `;
-  const { stdout } = await execFileAsync("python", ["-c", script], { cwd: ROOT, timeout: 8000 });
+  const pythonArgs = PYTHON_CMD.toLowerCase().endsWith("\\py") || PYTHON_CMD.toLowerCase() === "py"
+    ? ["-3", "-c", script]
+    : ["-c", script];
+  const { stdout } = await execFileAsync(PYTHON_CMD, pythonArgs, { cwd: ROOT, timeout: 8000 });
   return JSON.parse(stdout.trim());
 }
 
@@ -262,12 +284,10 @@ let runtimeSettings = loadRuntimeSettings();
 const server = http.createServer((req, res) => {
   try {
     const requestUrl = new URL(req.url || "/", "http://localhost");
-
     if (req.method === "GET" && requestUrl.pathname === "/api/runtime") {
       sendJson(res, 200, runtimeSettings);
       return;
     }
-
     if (req.method === "POST" && requestUrl.pathname === "/api/runtime") {
       readJsonBody(req)
         .then((body) => {
@@ -278,14 +298,12 @@ const server = http.createServer((req, res) => {
         .catch((error) => sendJson(res, 400, { error: error.message }));
       return;
     }
-
     if (req.method === "POST" && requestUrl.pathname === "/api/runtime/reset") {
       runtimeSettings = { ...DEFAULT_RUNTIME_SETTINGS, updatedAt: Date.now() };
       persistRuntimeSettings(runtimeSettings);
       sendJson(res, 200, runtimeSettings);
       return;
     }
-
     if (requestUrl.pathname === "/api/chainlink/latest") {
       const pair = requestUrl.searchParams.get("pair") || "";
       fetchChainlinkLatest(pair)
@@ -293,7 +311,6 @@ const server = http.createServer((req, res) => {
         .catch((error) => sendJson(res, 500, { error: error.message }));
       return;
     }
-
     if (requestUrl.pathname === "/api/binance/latest") {
       const pair = requestUrl.searchParams.get("pair") || "";
       fetchBinanceLatest(pair)
@@ -301,7 +318,6 @@ const server = http.createServer((req, res) => {
         .catch((error) => sendJson(res, 500, { error: error.message }));
       return;
     }
-
     if (requestUrl.pathname === "/api/turbo/latest") {
       const pair = requestUrl.searchParams.get("pair") || "";
       fetchTurboLatest(pair)
@@ -344,5 +360,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Hosted product suite listening on http://0.0.0.0:${PORT}`);
+  console.log(`Hosted product suite listening on http://0.0.0.0:${PORT} using ${PYTHON_CMD}`);
 });
