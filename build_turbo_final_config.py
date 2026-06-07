@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -114,6 +115,11 @@ def p_up_from_bucket_win_rates(mode: str, mean_reversion_win_rate_pct: float, mo
     return p_up_if_move_positive, p_up_if_move_negative, chosen_win_rate
 
 
+def finite_or_none(value):
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
 def build_disabled(pair: str, product: str, duration_s: int) -> dict:
     return {
         "pair": pair,
@@ -201,9 +207,9 @@ def main() -> None:
                 "safe_payout_pct": safe,
                 "p_up_if_move_positive": p_up_if_move_positive,
                 "p_up_if_move_negative": p_up_if_move_negative,
-                "chosen_win_rate_pct": float(diag_row["momentum_win_rate_pct"] if mode == "momentum" else diag_row["mean_reversion_win_rate_pct"]),
-                "mean_reversion_win_rate_pct": float(diag_row["mean_reversion_win_rate_pct"]),
-                "momentum_win_rate_pct": float(diag_row["momentum_win_rate_pct"]),
+                "chosen_win_rate_pct": finite_or_none(diag_row["momentum_win_rate_pct"] if mode == "momentum" else diag_row["mean_reversion_win_rate_pct"]),
+                "mean_reversion_win_rate_pct": finite_or_none(diag_row["mean_reversion_win_rate_pct"]),
+                "momentum_win_rate_pct": finite_or_none(diag_row["momentum_win_rate_pct"]),
                 "chosen_skew_pp": (chosen_win_rate - 0.5) * 100.0,
                 "trades": int(diag_row["trades"]),
                 "optimized_bucket_pnl": float(row["optimized_bucket_pnl"]),

@@ -63,7 +63,43 @@
       .controls {
         display: grid;
         gap: 16px;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+      .quick-picks {
+        display: grid;
+        gap: 14px;
+        grid-column: 1 / -1;
+      }
+      .quick-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .quick-row-title {
+        min-width: 64px;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .quick-chip-list {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .quick-chip {
+        width: auto;
+        border-radius: 999px;
+        padding: 9px 14px;
+        background: rgba(255,255,255,0.95);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .quick-chip.active {
+        background: linear-gradient(135deg, #1f7a5a, #125d43);
+        color: #fff;
+        border-color: transparent;
       }
       label {
         display: block;
@@ -73,7 +109,7 @@
         color: var(--muted);
         margin-bottom: 8px;
       }
-      select, input, button {
+      select, button {
         width: 100%;
         border: 1px solid var(--border);
         border-radius: 14px;
@@ -82,27 +118,11 @@
         color: var(--ink);
         font: inherit;
       }
-      input[type="number"] {
-        appearance: textfield;
-      }
-      input[type="number"]::-webkit-outer-spin-button,
-      input[type="number"]::-webkit-inner-spin-button {
-        appearance: none;
-        margin: 0;
-      }
       button {
         cursor: pointer;
         font-weight: 700;
         background: linear-gradient(135deg, #1f7a5a, #125d43);
         color: #fff;
-      }
-      .button-stack {
-        display: grid;
-        gap: 10px;
-      }
-      .button-stack button.secondary {
-        background: #fff;
-        color: var(--ink);
       }
       .grid {
         display: grid;
@@ -238,15 +258,14 @@
       <section class="hero">
         <div class="panel">
           <div class="eyebrow">Product Suite</div>
-          <h1>Hosted Product Suite Console</h1>
+          <h1>Product Suite Console</h1>
           <p>
             Switch between the `chainlink model` and the `turbo model` for `30s`, `1m`, `3m`, `5m`, `15m`, and `1h`.
             It shows the live fair-mid estimate, active skew logic, public implied edge/skew, and the current two-way quote at the selected edge.
-            This hosted version keeps one shared runtime profile on the server, so changing the controls updates the page state for everyone on this URL.
           </p>
         </div>
         <div class="panel">
-          <div class="eyebrow">Live Controls</div>
+          <div class="eyebrow">Controls</div>
           <div class="controls">
             <div>
               <label for="family-select">Model</label>
@@ -265,7 +284,22 @@
             </div>
             <div>
               <label for="edge-input">Edge %</label>
-              <input id="edge-input" type="number" min="0" max="20" step="0.1" value="7.0" />
+              <select id="edge-input">
+                <option value="10">10.0</option>
+                <option value="9">9.0</option>
+                <option value="8">8.0</option>
+                <option value="7">7.0</option>
+                <option value="6">6.0</option>
+                <option value="5.5">5.5</option>
+                <option value="4">4.0</option>
+                <option value="3.5">3.5</option>
+                <option value="3">3.0</option>
+                <option value="5">5.0</option>
+              </select>
+            </div>
+            <div>
+              <label for="refresh-btn">Config</label>
+              <button id="refresh-btn">Reload Models</button>
             </div>
             <div>
               <label for="alpha-override">Our Alpha</label>
@@ -280,24 +314,19 @@
                 <option value="1.5">1.50</option>
               </select>
             </div>
-            <div>
-              <label for="floor-input">Favored Payout Floor %</label>
-              <input id="floor-input" type="number" min="30" max="120" step="1" placeholder="Auto from config" />
-            </div>
-            <div>
-              <label for="apply-runtime-btn">Runtime</label>
-              <div class="button-stack">
-                <button id="apply-runtime-btn">Apply Hosted Values</button>
-                <button id="reset-runtime-btn" class="secondary">Reset Defaults</button>
+            <div class="quick-picks">
+              <div class="quick-row">
+                <span class="quick-row-title">Pair</span>
+                <div id="pair-chips" class="quick-chip-list"></div>
               </div>
-            </div>
-            <div>
-              <label for="refresh-btn">Models</label>
-              <button id="refresh-btn">Reload Model Files</button>
+              <div class="quick-row">
+                <span class="quick-row-title">Product</span>
+                <div id="product-chips" class="quick-chip-list"></div>
+              </div>
             </div>
           </div>
           <div class="note" id="controls-note">
-            Waiting for runtime settings.
+            Waiting for model config.
           </div>
         </div>
       </section>
@@ -367,6 +396,6 @@
         </table>
       </section>
     </div>
-    <script src="./live_chainlink_product_suite_console.js?v=20260606-hosted"></script>
+    <script src="./live_chainlink_product_suite_console.js?v=20260606g"></script>
   </body>
 </html>

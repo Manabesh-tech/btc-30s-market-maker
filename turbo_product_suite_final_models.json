@@ -921,7 +921,7 @@
         "p_up_if_move_negative": 0.63,
         "chosen_win_rate_pct": 68.75,
         "mean_reversion_win_rate_pct": 68.75,
-        "momentum_win_rate_pct": NaN,
+        "momentum_win_rate_pct": null,
         "chosen_skew_pp": 13.0,
         "trades": 16,
         "optimized_bucket_pnl": -178.2
@@ -937,7 +937,7 @@
         "p_up_if_move_negative": 0.61,
         "chosen_win_rate_pct": 62.5,
         "mean_reversion_win_rate_pct": 62.5,
-        "momentum_win_rate_pct": NaN,
+        "momentum_win_rate_pct": null,
         "chosen_skew_pp": 10.999999999999998,
         "trades": 24,
         "optimized_bucket_pnl": 378.39
@@ -953,7 +953,7 @@
         "p_up_if_move_negative": 0.58,
         "chosen_win_rate_pct": 57.69,
         "mean_reversion_win_rate_pct": 57.69,
-        "momentum_win_rate_pct": NaN,
+        "momentum_win_rate_pct": null,
         "chosen_skew_pp": 7.9999999999999964,
         "trades": 26,
         "optimized_bucket_pnl": 252.6
@@ -1087,7 +1087,7 @@
         "p_up_if_move_negative": 0.64,
         "chosen_win_rate_pct": 100.0,
         "mean_reversion_win_rate_pct": 100.0,
-        "momentum_win_rate_pct": NaN,
+        "momentum_win_rate_pct": null,
         "chosen_skew_pp": 14.000000000000002,
         "trades": 13,
         "optimized_bucket_pnl": -174.79

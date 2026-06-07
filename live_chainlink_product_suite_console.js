@@ -3,14 +3,12 @@
 const params = new URLSearchParams(window.location.search);
 const CONFIG_MODE = params.get("config") || "final";
 const DEFAULT_FAMILY = params.get("family") || "chainlink";
-const ALPHA_PROXY_URL = "./pool_alpha_proxy_last8h.json";
+const ALPHA_PROXY_URL = "./outputs/pool_alpha_proxy_last8h.json";
 const PLATFORM_CONFIG_URL = "https://apis.turboflow.xyz/public/pm/config?version=2";
-const RUNTIME_URL = "./api/runtime";
 const CL_POLL_MS = 1000;
 const MARKET_POLL_MS = 1000;
 const SNAPSHOT_MS = 1000;
 const RENDER_MS = 1000;
-const RUNTIME_POLL_MS = 5000;
 const HISTORY_LIMIT = 9000;
 
 const FEEDS = {
@@ -38,10 +36,8 @@ const state = {
   modelFamily: DEFAULT_FAMILY,
   selectedPair: "BTC/USDT",
   selectedProduct: "30s",
-  edgePct: 7.0,
+  edgePct: 4.0,
   alphaOverride: null,
-  payoutFloorOverride: null,
-  runtimeLoadedAt: null,
   lastReloadedAt: null,
   platformQuotes: {},
   alphaProxyRows: [],
@@ -50,6 +46,7 @@ const state = {
     "BTC/USDT": { chainlink: null, turbo: null, spot: null, perp: null, lastUpdateTs: null, history: [] },
     "ETH/USDT": { chainlink: null, turbo: null, spot: null, perp: null, lastUpdateTs: null, history: [] },
   },
+  turboBucketMemory: {},
 };
 
 let snapshotTimer = null;
@@ -57,7 +54,6 @@ let chainlinkTimer = null;
 let marketTimer = null;
 let renderTimer = null;
 let turboTimer = null;
-let runtimeTimer = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -115,13 +111,6 @@ function maxDefendableProbability(edgePct, floorPayout) {
   return probabilityForPayout(floorPayout, edgePct);
 }
 
-function effectivePayoutFloor(config) {
-  if (Number.isFinite(Number(state.payoutFloorOverride))) {
-    return Number(state.payoutFloorOverride);
-  }
-  return Number(config.favored_payout_floor);
-}
-
 function impliedQuoteStats(higherReturnRate, lowerReturnRate) {
   const up = Number(higherReturnRate);
   const down = Number(lowerReturnRate);
@@ -176,96 +165,6 @@ function signalMarkup(favoredSide) {
   return `<span class="signal-pill">${escapeHtml(favoredSide || "-")}</span>`;
 }
 
-function syncControlInputs() {
-  $("family-select").value = state.modelFamily;
-  if ($("pair-select").options.length) {
-    $("pair-select").value = state.selectedPair;
-  }
-  if ($("product-select").options.length) {
-    $("product-select").value = state.selectedProduct;
-  }
-  $("edge-input").value = Number(state.edgePct).toFixed(1);
-  $("alpha-override").value = Number.isFinite(state.alphaOverride) ? String(state.alphaOverride) : "auto";
-  $("floor-input").value = Number.isFinite(state.payoutFloorOverride) ? String(state.payoutFloorOverride) : "";
-}
-
-function applyRuntimeSettings(runtime) {
-  if (!runtime || typeof runtime !== "object") return;
-  state.modelFamily = runtime.modelFamily || state.modelFamily;
-  state.selectedPair = runtime.selectedPair || state.selectedPair;
-  state.selectedProduct = runtime.selectedProduct || state.selectedProduct;
-  state.edgePct = Number.isFinite(Number(runtime.edgePct)) ? Number(runtime.edgePct) : state.edgePct;
-  state.alphaOverride = Number.isFinite(Number(runtime.alphaOverride)) ? Number(runtime.alphaOverride) : null;
-  state.payoutFloorOverride = Number.isFinite(Number(runtime.payoutFloorOverride)) ? Number(runtime.payoutFloorOverride) : null;
-  state.runtimeLoadedAt = Number.isFinite(Number(runtime.updatedAt)) ? Number(runtime.updatedAt) : Date.now();
-}
-
-async function fetchRuntimeSettings() {
-  const response = await fetch(RUNTIME_URL, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Runtime settings ${response.status}`);
-  }
-  return response.json();
-}
-
-async function refreshRuntimeSettings({ reloadConfigs = false } = {}) {
-  const previousFamily = state.modelFamily;
-  const runtime = await fetchRuntimeSettings();
-  applyRuntimeSettings(runtime);
-  const shouldReloadConfigs = reloadConfigs || previousFamily !== state.modelFamily || !Object.keys(state.configs).length;
-  if (shouldReloadConfigs) {
-    await loadConfigs();
-  } else {
-    populateSelectors();
-    syncControlInputs();
-    render();
-  }
-}
-
-async function saveRuntimeSettings() {
-  const response = await fetch(RUNTIME_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      modelFamily: state.modelFamily,
-      selectedPair: state.selectedPair,
-      selectedProduct: state.selectedProduct,
-      edgePct: state.edgePct,
-      alphaOverride: Number.isFinite(state.alphaOverride) ? state.alphaOverride : null,
-      payoutFloorOverride: Number.isFinite(state.payoutFloorOverride) ? state.payoutFloorOverride : null,
-    }),
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || `Runtime save ${response.status}`);
-  }
-  const runtime = await response.json();
-  const familyChanged = runtime.modelFamily !== state.modelFamily;
-  applyRuntimeSettings(runtime);
-  if (familyChanged) {
-    await loadConfigs();
-  } else {
-    populateSelectors();
-    syncControlInputs();
-    render();
-  }
-}
-
-async function resetRuntimeSettings() {
-  const response = await fetch(`${RUNTIME_URL}/reset`, {
-    method: "POST",
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || `Runtime reset ${response.status}`);
-  }
-  const runtime = await response.json();
-  applyRuntimeSettings(runtime);
-  await loadConfigs();
-}
-
 async function fetchChainlinkLatest(pairName) {
   const response = await fetch(`./api/chainlink/latest?pair=${encodeURIComponent(pairName)}`, { cache: "no-store" });
   if (!response.ok) {
@@ -313,17 +212,69 @@ function currentMarket() {
   return state.market[state.selectedPair];
 }
 
+function currentStateKey() {
+  return `${state.modelFamily}::${state.selectedPair}::${state.selectedProduct}`;
+}
+
 function currentAlphaProxyRows() {
   return state.alphaProxyRows.filter(
     (row) => row.pair === state.selectedPair && row.product === state.selectedProduct,
   );
 }
 
+function parseJsonLenient(text) {
+  return JSON.parse(
+    text.replace(/\bNaN\b/g, "null"),
+  );
+}
+
+function sortBucketRules(bucketRules) {
+  return [...bucketRules].sort((a, b) => Number(a.min_abs_bp || 0) - Number(b.min_abs_bp || 0));
+}
+
+function pickTurboBucket(absMove, bucketRules, memoryKey) {
+  const sortedRules = sortBucketRules(bucketRules);
+  const direct = sortedRules.find(
+    (rule) => absMove >= Number(rule.min_abs_bp || 0)
+      && (rule.max_abs_bp == null || absMove < Number(rule.max_abs_bp)),
+  ) || null;
+  const previousLabel = state.turboBucketMemory[memoryKey];
+  if (!previousLabel) {
+    if (direct) state.turboBucketMemory[memoryKey] = direct.label;
+    return direct;
+  }
+  const previous = sortedRules.find((rule) => rule.label === previousLabel);
+  if (!previous) {
+    if (direct) state.turboBucketMemory[memoryKey] = direct.label;
+    return direct;
+  }
+  const hysteresisBp = 0.75;
+  const prevMin = Number(previous.min_abs_bp || 0);
+  const prevMax = previous.max_abs_bp == null ? Infinity : Number(previous.max_abs_bp);
+  const withinStickyRange = absMove >= Math.max(0, prevMin - hysteresisBp) && absMove < (prevMax + hysteresisBp);
+  if (withinStickyRange) {
+    return previous;
+  }
+  if (direct) {
+    state.turboBucketMemory[memoryKey] = direct.label;
+    return direct;
+  }
+  return previous;
+}
+
 function configUrlForCurrentFamily() {
   if (state.modelFamily === "turbo") {
-    return "./turbo_product_suite_final_models.json";
+    return "./outputs/turbo_product_suite_final_models.json";
   }
-  return "./chainlink_product_suite_final_models.json";
+  return CONFIG_MODE === "raw"
+    ? "./outputs/chainlink_product_suite_best_models.json"
+    : CONFIG_MODE === "v2"
+      ? "./outputs/chainlink_product_suite_v2_models.json"
+      : CONFIG_MODE === "mid"
+        ? "./outputs/chainlink_product_suite_mid_models.json"
+        : CONFIG_MODE === "prod"
+          ? "./outputs/chainlink_product_suite_prod_models.json"
+          : "./outputs/chainlink_product_suite_final_models.json";
 }
 
 function warmupState(config, market) {
@@ -433,7 +384,8 @@ function computeFeatures(config, market) {
     return { eval_ts: Date.now(), disabled: true };
   }
   if (config.engine === "turbo_bucket") {
-    const evalTs = Date.now();
+    const latest = market.history.length ? market.history[market.history.length - 1] : null;
+    const evalTs = latest ? latest.ts : Date.now();
     const lookbackMs = Number(config.lookback_s || config.duration_s) * 1000;
     const current = pointAtOrBefore(market.history, evalTs);
     const prev = pointAtOrBefore(market.history, evalTs - lookbackMs);
@@ -441,7 +393,7 @@ function computeFeatures(config, market) {
     const turboMoveBp = (current.turbo / prev.turbo - 1) * 10000;
     const absMove = Math.abs(turboMoveBp);
     const bucketRules = Array.isArray(config.bucket_rules) ? config.bucket_rules : [];
-    const bucket = bucketRules.find((rule) => absMove >= Number(rule.min_abs_bp || 0) && (rule.max_abs_bp == null || absMove < Number(rule.max_abs_bp)));
+    const bucket = pickTurboBucket(absMove, bucketRules, currentStateKey());
     return {
       eval_ts: evalTs,
       turbo_now: current.turbo,
@@ -546,7 +498,7 @@ function evaluateModel(config, features) {
     }
     const effectiveAlpha = Number.isFinite(state.alphaOverride) ? state.alphaOverride : config.alpha;
     const adjusted = 0.5 + effectiveAlpha * (modelProbUp - 0.5);
-    const maxProb = maxDefendableProbability(state.edgePct, effectivePayoutFloor(config));
+    const maxProb = maxDefendableProbability(state.edgePct, config.favored_payout_floor);
     const adjProbUp = clamp(adjusted, 1 - maxProb, maxProb);
     const confidence = Math.abs(adjProbUp - 0.5);
     const active = Boolean(bucket);
@@ -590,7 +542,7 @@ function evaluateModel(config, features) {
   const modelProbUp = overlayResult.prob;
   const effectiveAlpha = Number.isFinite(state.alphaOverride) ? state.alphaOverride : config.alpha;
   const adjusted = 0.5 + effectiveAlpha * (modelProbUp - 0.5);
-  const maxProb = maxDefendableProbability(state.edgePct, effectivePayoutFloor(config));
+  const maxProb = maxDefendableProbability(state.edgePct, config.favored_payout_floor);
   const adjProbUp = clamp(adjusted, 1 - maxProb, maxProb);
   const confidence = Math.abs(adjProbUp - 0.5);
   const neutralBand = Number.isFinite(Number(config.neutral_band)) ? Number(config.neutral_band) : 0;
@@ -640,6 +592,8 @@ function evaluateModel(config, features) {
 function populateSelectors() {
   const pairSelect = $("pair-select");
   const productSelect = $("product-select");
+  const pairChips = $("pair-chips");
+  const productChips = $("product-chips");
   const keys = Object.keys(state.configs);
   const pairs = [...new Set(keys.map((key) => key.split("::")[0]))];
   pairSelect.innerHTML = pairs.map((pair) => `<option value="${pair}">${pair}</option>`).join("");
@@ -653,12 +607,23 @@ function populateSelectors() {
     state.selectedProduct = products[0] || "";
   }
   productSelect.innerHTML = products.map((product) => `<option value="${product}">${product}</option>`).join("");
-  syncControlInputs();
+  pairSelect.value = state.selectedPair;
+  productSelect.value = state.selectedProduct;
+  pairChips.innerHTML = pairs.map((pair) => `
+    <button type="button" class="quick-chip${pair === state.selectedPair ? " active" : ""}" data-pair="${pair}">
+      ${pair}
+    </button>
+  `).join("");
+  productChips.innerHTML = products.map((product) => `
+    <button type="button" class="quick-chip${product === state.selectedProduct ? " active" : ""}" data-product="${product}">
+      ${product}
+    </button>
+  `).join("");
 }
 
 async function loadConfigs() {
   const response = await fetch(configUrlForCurrentFamily(), { cache: "no-store" });
-  state.configs = await response.json();
+  state.configs = parseJsonLenient(await response.text());
   state.lastReloadedAt = Date.now();
   const firstKey = Object.keys(state.configs)[0];
   if (firstKey) {
@@ -675,7 +640,7 @@ async function loadConfigs() {
 async function loadAlphaProxies() {
   try {
     const response = await fetch(ALPHA_PROXY_URL, { cache: "no-store" });
-    const payload = await response.json();
+    const payload = parseJsonLenient(await response.text());
     state.alphaProxyRows = Array.isArray(payload.rows) ? payload.rows : [];
     state.alphaProxyMeta = payload;
   } catch (error) {
@@ -827,15 +792,10 @@ function render() {
     $("controls-note").textContent = "No model config loaded for the selected pair/product.";
     return;
   }
-  const activeFloor = effectivePayoutFloor(config);
   const warmup = warmupState(config, market);
   const reloadText = state.lastReloadedAt ? ` Last reload ${formatDateTime(state.lastReloadedAt)}.` : "";
   const alphaMode = Number.isFinite(state.alphaOverride) ? `override ${state.alphaOverride.toFixed(2)}` : `config ${config.alpha.toFixed(2)}`;
-  const floorMode = Number.isFinite(state.payoutFloorOverride)
-    ? `override ${activeFloor.toFixed(0)}`
-    : `config ${activeFloor.toFixed(0)}`;
-  const runtimeText = state.runtimeLoadedAt ? ` Hosted runtime updated ${formatDateTime(state.runtimeLoadedAt)}.` : "";
-  $("controls-note").textContent = `Loaded ${state.modelFamily} ${configModeLabel()} ${config.pair} ${config.product} model: alpha ${alphaMode}, margin ${formatPct(config.margin * 100, 1)}, payout floor ${floorMode}.${reloadText}${runtimeText}`;
+  $("controls-note").textContent = `Loaded ${state.modelFamily} ${configModeLabel()} ${config.pair} ${config.product} model: alpha ${alphaMode}, margin ${formatPct(config.margin * 100, 1)}, payout floor ${config.favored_payout_floor.toFixed(0)}.${reloadText}`;
   const features = computeFeatures(config, market);
   const modelEval = features ? evaluateModel(config, features) : null;
   const platform = state.platformQuotes[`${config.pair}::${config.duration_s}`];
@@ -873,7 +833,7 @@ function render() {
       ? `Higher / Lower payouts at ${state.edgePct.toFixed(1)}% edge`
       : "Suppressed until confidence clears the active threshold.";
     $("model-prob").textContent = `${formatPct(modelEval.adjProbUp * 100, 2)} up`;
-    const capLabel = `${activeFloor.toFixed(0)}-floor cap ${formatPct(maxDefendableProbability(state.edgePct, activeFloor) * 100, 2)}`;
+    const capLabel = `${config.favored_payout_floor.toFixed(0)}-floor cap ${formatPct(maxDefendableProbability(state.edgePct, config.favored_payout_floor) * 100, 2)}`;
     $("model-prob-note").textContent = `${config.calibration ? `${config.calibration.kind} calibrated ` : ""}Raw ${formatPct(modelEval.rawProbUpBase * 100, 2)} -> fair ${formatPct(modelEval.rawProbUp * 100, 2)}${modelEval.overlayReason ? ` -> overlay ${formatPct(modelEval.modelProbUp * 100, 2)}` : ""} -> adjusted ${formatPct(modelEval.adjProbUp * 100, 2)} (${capLabel}); evaluated ${formatDateTime(features.eval_ts)} for entry in 1s.`;
     $("model-status").textContent = modelEval.active ? "Live signal" : modelEval.inactiveMode === "suppress" ? "Standby / No Quote" : "Neutral band";
     $("model-summary").textContent = `${config.product} ${configModeLabel().toLowerCase()} uses ${config.model.features.length} features, hard floor-only skew, and ${config.notes.selection_metric}`;
@@ -930,6 +890,13 @@ function bindControls() {
     populateSelectors();
     render();
   });
+  $("pair-chips").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-pair]");
+    if (!button) return;
+    state.selectedPair = button.dataset.pair;
+    populateSelectors();
+    render();
+  });
   $("family-select").addEventListener("change", async (event) => {
     state.modelFamily = event.target.value;
     await loadConfigs();
@@ -937,47 +904,24 @@ function bindControls() {
   });
   $("product-select").addEventListener("change", (event) => {
     state.selectedProduct = event.target.value;
+    populateSelectors();
+    render();
+  });
+  $("product-chips").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-product]");
+    if (!button) return;
+    state.selectedProduct = button.dataset.product;
+    populateSelectors();
     render();
   });
   $("edge-input").addEventListener("change", (event) => {
-    state.edgePct = Number(event.target.value) || 7.0;
+    state.edgePct = Number(event.target.value) || 4.0;
     render();
   });
   $("alpha-override").addEventListener("change", (event) => {
     const value = event.target.value;
     state.alphaOverride = value === "auto" ? null : Number(value);
     render();
-  });
-  $("floor-input").addEventListener("change", (event) => {
-    const value = event.target.value.trim();
-    state.payoutFloorOverride = value === "" ? null : Number(value);
-    render();
-  });
-  $("apply-runtime-btn").addEventListener("click", async () => {
-    const button = $("apply-runtime-btn");
-    const original = button.textContent;
-    button.disabled = true;
-    button.textContent = "Applying...";
-    try {
-      await saveRuntimeSettings();
-      render();
-    } finally {
-      button.disabled = false;
-      button.textContent = original;
-    }
-  });
-  $("reset-runtime-btn").addEventListener("click", async () => {
-    const button = $("reset-runtime-btn");
-    const original = button.textContent;
-    button.disabled = true;
-    button.textContent = "Resetting...";
-    try {
-      await resetRuntimeSettings();
-      render();
-    } finally {
-      button.disabled = false;
-      button.textContent = original;
-    }
   });
   $("refresh-btn").addEventListener("click", async () => {
     const button = $("refresh-btn");
@@ -1001,23 +945,18 @@ function bindControls() {
 
 async function init() {
   bindControls();
-  await refreshRuntimeSettings({ reloadConfigs: true });
+  $("family-select").value = state.modelFamily;
+  await loadConfigs();
   await loadAlphaProxies();
   await fetchPlatformQuotes();
   await pollChainlink();
   await pollTurbo();
   await pollBinance();
-  syncControlInputs();
   chainlinkTimer = window.setInterval(pollChainlink, CL_POLL_MS);
   turboTimer = window.setInterval(pollTurbo, CL_POLL_MS);
   marketTimer = window.setInterval(pollBinance, MARKET_POLL_MS);
   snapshotTimer = window.setInterval(recordSnapshots, SNAPSHOT_MS);
   renderTimer = window.setInterval(render, RENDER_MS);
-  runtimeTimer = window.setInterval(() => {
-    refreshRuntimeSettings().catch((error) => {
-      console.error("Runtime refresh failed", error);
-    });
-  }, RUNTIME_POLL_MS);
 }
 
 init().catch((error) => {
