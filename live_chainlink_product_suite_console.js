@@ -3,8 +3,9 @@
 const params = new URLSearchParams(window.location.search);
 const CONFIG_MODE = params.get("config") || "final";
 const DEFAULT_FAMILY = params.get("family") || "chainlink";
-const ALPHA_PROXY_URL = "./outputs/pool_alpha_proxy_last8h.json";
+const ALPHA_PROXY_URL = "./pool_alpha_proxy_last8h.json";
 const PLATFORM_CONFIG_URL = "https://apis.turboflow.xyz/public/pm/config?version=2";
+const RUNTIME_URL = "./api/runtime";
 const CL_POLL_MS = 1000;
 const MARKET_POLL_MS = 1000;
 const SNAPSHOT_MS = 1000;
@@ -36,7 +37,7 @@ const state = {
   modelFamily: DEFAULT_FAMILY,
   selectedPair: "BTC/USDT",
   selectedProduct: "30s",
-  edgePct: 4.0,
+  edgePct: 7.0,
   alphaOverride: null,
   lastReloadedAt: null,
   platformQuotes: {},
@@ -222,6 +223,10 @@ function currentAlphaProxyRows() {
   );
 }
 
+function selectValueForNumber(value) {
+  return Number.isFinite(Number(value)) ? String(Number(value)) : "";
+}
+
 function parseJsonLenient(text) {
   return JSON.parse(
     text.replace(/\bNaN\b/g, "null"),
@@ -264,17 +269,36 @@ function pickTurboBucket(absMove, bucketRules, memoryKey) {
 
 function configUrlForCurrentFamily() {
   if (state.modelFamily === "turbo") {
-    return "./outputs/turbo_product_suite_final_models.json";
+    return "./turbo_product_suite_final_models.json";
   }
-  return CONFIG_MODE === "raw"
-    ? "./outputs/chainlink_product_suite_best_models.json"
-    : CONFIG_MODE === "v2"
-      ? "./outputs/chainlink_product_suite_v2_models.json"
-      : CONFIG_MODE === "mid"
-        ? "./outputs/chainlink_product_suite_mid_models.json"
-        : CONFIG_MODE === "prod"
-          ? "./outputs/chainlink_product_suite_prod_models.json"
-          : "./outputs/chainlink_product_suite_final_models.json";
+  return "./chainlink_product_suite_final_models.json";
+}
+
+async function loadRuntimeSettings() {
+  try {
+    const response = await fetch(RUNTIME_URL, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Runtime ${response.status}`);
+    }
+    const runtime = await response.json();
+    if (runtime.modelFamily === "chainlink" || runtime.modelFamily === "turbo") {
+      state.modelFamily = runtime.modelFamily;
+    }
+    if (PAIR_META[runtime.selectedPair]) {
+      state.selectedPair = runtime.selectedPair;
+    }
+    if (typeof runtime.selectedProduct === "string" && runtime.selectedProduct) {
+      state.selectedProduct = runtime.selectedProduct;
+    }
+    if (Number.isFinite(Number(runtime.edgePct))) {
+      state.edgePct = Number(runtime.edgePct);
+    }
+    if (runtime.alphaOverride == null || Number.isFinite(Number(runtime.alphaOverride))) {
+      state.alphaOverride = runtime.alphaOverride == null ? null : Number(runtime.alphaOverride);
+    }
+  } catch (error) {
+    console.error("Runtime settings load failed", error);
+  }
 }
 
 function warmupState(config, market) {
@@ -609,6 +633,9 @@ function populateSelectors() {
   productSelect.innerHTML = products.map((product) => `<option value="${product}">${product}</option>`).join("");
   pairSelect.value = state.selectedPair;
   productSelect.value = state.selectedProduct;
+  $("family-select").value = state.modelFamily;
+  $("edge-input").value = selectValueForNumber(state.edgePct);
+  $("alpha-override").value = state.alphaOverride == null ? "auto" : selectValueForNumber(state.alphaOverride);
   pairChips.innerHTML = pairs.map((pair) => `
     <button type="button" class="quick-chip${pair === state.selectedPair ? " active" : ""}" data-pair="${pair}">
       ${pair}
@@ -915,7 +942,7 @@ function bindControls() {
     render();
   });
   $("edge-input").addEventListener("change", (event) => {
-    state.edgePct = Number(event.target.value) || 4.0;
+    state.edgePct = Number(event.target.value) || 7.0;
     render();
   });
   $("alpha-override").addEventListener("change", (event) => {
@@ -945,7 +972,10 @@ function bindControls() {
 
 async function init() {
   bindControls();
+  await loadRuntimeSettings();
   $("family-select").value = state.modelFamily;
+  $("edge-input").value = selectValueForNumber(state.edgePct);
+  $("alpha-override").value = state.alphaOverride == null ? "auto" : selectValueForNumber(state.alphaOverride);
   await loadConfigs();
   await loadAlphaProxies();
   await fetchPlatformQuotes();
