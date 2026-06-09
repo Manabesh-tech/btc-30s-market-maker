@@ -91,7 +91,7 @@ const LEGACY_TURBO_SHORT_BASE = {
 
 function resolvePythonCommand() {
   for (const candidate of PYTHON_CANDIDATES) {
-    if (candidate === "python" || candidate === "py") {
+    if (candidate === "python" || candidate === "python3" || candidate === "py") {
       return candidate;
     }
     if (fs.existsSync(candidate)) {
