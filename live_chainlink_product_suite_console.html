@@ -29,6 +29,48 @@
         margin: 0 auto;
         padding: 24px;
       }
+      .top-tabs {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+      .top-tab {
+        width: auto;
+        border-radius: 999px;
+        padding: 10px 16px;
+        background: rgba(255,255,255,0.95);
+        color: var(--ink);
+        border: 1px solid var(--border);
+        font-weight: 700;
+      }
+      .top-tab.active,
+      .top-tab[aria-pressed="true"] {
+        background: linear-gradient(135deg, #1f7a5a, #125d43);
+        color: #fff;
+        border-color: transparent;
+      }
+      .admin-grid {
+        display: none;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+      .admin-grid.active {
+        display: grid;
+      }
+      .admin-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .admin-actions .ghost {
+        background: rgba(255,255,255,0.95);
+        color: var(--ink);
+      }
+      .hidden {
+        display: none !important;
+      }
       .hero {
         display: grid;
         gap: 18px;
@@ -320,6 +362,42 @@
   </head>
   <body>
     <div class="shell">
+      <div id="top-tabs" class="top-tabs">
+        <button type="button" class="top-tab active" data-view="live" aria-pressed="true">Live</button>
+        <button type="button" class="top-tab" data-view="calibrate" aria-pressed="false">Calibrate</button>
+        <button type="button" class="top-tab" data-view="candidates" aria-pressed="false">Candidates</button>
+      </div>
+
+      <section id="admin-view" class="admin-grid">
+        <div class="panel">
+          <div class="eyebrow" id="admin-eyebrow">Research</div>
+          <h2 id="admin-title">Calibration Workspace</h2>
+          <p id="admin-copy" style="margin-top:10px; color:var(--muted); line-height:1.55;">
+            Run offline replay and ladder-generation workflows here in the next version. This panel is intentionally separated
+            from the live quote screen so research actions never accidentally change the production quote engine.
+          </p>
+          <div class="admin-actions">
+            <button type="button">Calibrate Candidate</button>
+            <button type="button" class="ghost">Export Report</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="eyebrow">Status</div>
+          <table>
+            <tbody>
+              <tr><th>Scope</th><td id="admin-scope">Chainlink / Turbo</td></tr>
+              <tr><th>Current State</th><td id="admin-state">Ready for future admin wiring</td></tr>
+              <tr><th>Expected Output</th><td id="admin-output">Candidate JSON + report + ladder summary</td></tr>
+              <tr><th>Promotion Model</th><td id="admin-promotion">Human review before deploy</td></tr>
+            </tbody>
+          </table>
+          <div class="note" id="admin-note">
+            This advanced version adds the tab structure now. The live page remains the trading monitor; calibrate and candidates are the admin/research surfaces.
+          </div>
+        </div>
+      </section>
+
+      <div id="live-view">
       <section class="hero">
         <div class="panel">
           <div class="eyebrow">Product Suite</div>
@@ -538,7 +616,8 @@
           <tbody id="feature-body"></tbody>
         </table>
       </section>
+      </div>
     </div>
-    <script src="./live_chainlink_product_suite_console.js?v=20260608g"></script>
+    <script src="./live_chainlink_product_suite_console.js?v=20260609b"></script>
   </body>
 </html>

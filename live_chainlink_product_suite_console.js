@@ -6,9 +6,10 @@ const DEFAULT_FAMILY = params.get("family") || "chainlink";
 const DEFAULT_MODEL = params.get("model") || "model1";
 const DEFAULT_BLEND_MODEL = params.get("blend_model") || "none";
 const DEFAULT_BLEND_PCT = Number(params.get("blend") || 0);
-const ALPHA_PROXY_URL = "./pool_alpha_proxy_last8h.json";
+const DEFAULT_VIEW = params.get("view") || "live";
+const ALPHA_PROXY_URL = "./outputs/pool_alpha_proxy_last8h.json";
 const PLATFORM_CONFIG_URL = "https://apis.turboflow.xyz/public/pm/config?version=2";
-const TURBO_CONFIG_URL = "./turbo_product_suite_final_models.json";
+const TURBO_CONFIG_URL = "./outputs/turbo_product_suite_final_models.json";
 const TURBO_LEGACY_SHORT_EDGE_HINT = 4.0;
 const CL_POLL_MS = 1000;
 const MARKET_POLL_MS = 1000;
@@ -44,6 +45,7 @@ const state = {
     turbo: {},
   },
   familyMode: DEFAULT_FAMILY,
+  viewMode: DEFAULT_VIEW,
   modelMode: DEFAULT_MODEL,
   blendModelMode: DEFAULT_BLEND_MODEL,
   model2BlendPct: Number.isFinite(DEFAULT_BLEND_PCT) ? clamp(DEFAULT_BLEND_PCT, 0, 100) : 0,
@@ -348,6 +350,24 @@ function syncFamilyTabs() {
   }
 }
 
+function syncTopTabs() {
+  const topTabs = $("top-tabs");
+  if (!topTabs) return;
+  for (const button of topTabs.querySelectorAll("[data-view]")) {
+    const active = button.dataset.view === state.viewMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+  const liveView = $("live-view");
+  const adminView = $("admin-view");
+  if (liveView) {
+    liveView.classList.toggle("hidden", state.viewMode !== "live");
+  }
+  if (adminView) {
+    adminView.classList.toggle("active", state.viewMode !== "live");
+  }
+}
+
 function parseJsonLenient(text) {
   return JSON.parse(
     text.replace(/\bNaN\b/g, "null"),
@@ -531,12 +551,20 @@ function pickStickyBucket(absMove, bucketRules, memoryKey) {
 
 function configUrlForModel(modelKey) {
   if (modelKey === "model2") {
-    return "./chainlink_model2_smoothed_mr_models.json";
+    return "./outputs/chainlink_model2_smoothed_mr_models.json";
   }
   if (modelKey === "model3") {
-    return "./chainlink_model3_fixed_window_models.json";
+    return "./outputs/chainlink_model3_fixed_window_models.json";
   }
-  return "./chainlink_product_suite_final_models.json";
+  return CONFIG_MODE === "raw"
+    ? "./outputs/chainlink_product_suite_best_models.json"
+    : CONFIG_MODE === "v2"
+      ? "./outputs/chainlink_product_suite_v2_models.json"
+      : CONFIG_MODE === "mid"
+        ? "./outputs/chainlink_product_suite_mid_models.json"
+        : CONFIG_MODE === "prod"
+          ? "./outputs/chainlink_product_suite_prod_models.json"
+          : "./outputs/chainlink_product_suite_final_models.json";
 }
 
 function warmupState(config, market) {
@@ -1532,10 +1560,15 @@ function renderTurboFamily(config, market) {
 }
 
 function render() {
+  syncTopTabs();
+  $("page-time").textContent = formatDateTime(Date.now());
+  if (state.viewMode !== "live") {
+    renderAdminView();
+    return;
+  }
   if (state.familyMode === "turbo") {
     const config = currentTurboConfig();
     const market = currentMarket();
-    $("page-time").textContent = formatDateTime(Date.now());
     if (!config) {
       $("controls-note").textContent = "No turbo config loaded for the selected pair/product.";
       return;
@@ -1548,7 +1581,6 @@ function render() {
   const model2Config = currentConfigFor("model2");
   const model3Config = currentConfigFor("model3");
   const market = currentMarket();
-  $("page-time").textContent = formatDateTime(Date.now());
   if ($("hero-copy")) {
     $("hero-copy").textContent = "Compare Chainlink Model 1, Model 2, and Model 3, blend an alternate model into the selected quote engine, and recompute the MID every second. It shows our live MID and quote, the all-in aggregate market quote, the deployed baseline, and the gap between our model and the public market.";
   }
@@ -1727,7 +1759,31 @@ function render() {
   renderFeatureTable(features, config);
 }
 
+function renderAdminView() {
+  const isCalibrate = state.viewMode === "calibrate";
+  $("admin-eyebrow").textContent = isCalibrate ? "Research" : "Review";
+  $("admin-title").textContent = isCalibrate ? "Calibration Workspace" : "Candidate Models";
+  $("admin-copy").textContent = isCalibrate
+    ? "This tab is where we should run offline replay, regenerate ladders, and create a candidate model without touching the live quote engine. It is the right place for a future Calibrate button."
+    : "This tab is where generated candidate models should be reviewed before promotion. The goal is to compare current live logic against saved candidate versions and then approve, reject, or export them.";
+  $("admin-scope").textContent = isCalibrate ? `${familyLabel()} family research` : `${familyLabel()} candidate review`;
+  $("admin-state").textContent = isCalibrate ? "Structure is live; calibration actions not yet wired" : "Structure is live; candidate storage/promotion not yet wired";
+  $("admin-output").textContent = isCalibrate
+    ? "Candidate JSON + report + ladder summary"
+    : "Current vs candidate comparison + promote/discard controls";
+  $("admin-promotion").textContent = "Human review before deploy";
+  $("admin-note").textContent = isCalibrate
+    ? "Today this is a structured placeholder. The live dashboard remains fully functional while calibration gets built separately."
+    : "Today this is a structured placeholder. The next step would be persisting candidate versions and adding explicit promote/discard actions.";
+}
+
 function bindControls() {
+  $("top-tabs").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-view]");
+    if (!button) return;
+    state.viewMode = button.dataset.view;
+    render();
+  });
   $("family-tabs").addEventListener("click", (event) => {
     const button = event.target.closest("[data-family]");
     if (!button) return;

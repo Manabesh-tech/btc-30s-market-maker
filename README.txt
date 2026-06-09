@@ -1,6 +1,12 @@
-Deployment package prepared on 9 June 2026.
+Advanced deployment package prepared on 9 June 2026.
 
-This folder is the latest curated handoff for devs.
+This folder is the latest curated advanced handoff for devs.
+
+Advanced additions in this version:
+- server-side rolling history cache for seamless warm-up on hosted pages
+- client-side history preload from server on page open
+- latest unified dashboard with both Chainlink and Turbo families
+- latest Turbo ETH 30s and 1m short-tenor fills
 
 Source-of-truth model files:
 - chainlink_product_suite_final_models.json
