@@ -13,6 +13,7 @@ const TURBO_CONFIG_URL = "./turbo_product_suite_final_models.json";
 const TURBO_LEGACY_SHORT_EDGE_HINT = 4.0;
 const CL_POLL_MS = 1000;
 const MARKET_POLL_MS = 1000;
+const PLATFORM_POLL_MS = 5000;
 const SNAPSHOT_MS = 1000;
 const RENDER_MS = 1000;
 const HISTORY_LIMIT = 9000;
@@ -70,6 +71,7 @@ let chainlinkTimer = null;
 let turboTimer = null;
 let turboLegacyTimer = null;
 let marketTimer = null;
+let platformTimer = null;
 let renderTimer = null;
 
 function $(id) {
@@ -320,12 +322,25 @@ function syncBlendControls() {
     blendWeightControl.style.opacity = chainlinkMode ? "1" : "0.55";
   }
   if (!chainlinkMode) {
+    blendSelect.innerHTML = '<option value="none">Chainlink only</option>';
     blendSelect.disabled = true;
     blendInput.disabled = true;
     blendNumber.disabled = true;
     blendValue.textContent = "N/A";
     return;
   }
+  const blendChoices = [
+    { value: "none", label: "None" },
+    ...["model1", "model2", "model3"]
+      .filter((modelKey) => modelKey !== state.modelMode)
+      .map((modelKey) => ({
+        value: modelKey,
+        label: modelKey === "model1" ? "Model 1" : modelKey === "model2" ? "Model 2" : "Model 3",
+      })),
+  ];
+  blendSelect.innerHTML = blendChoices
+    .map((choice) => `<option value="${choice.value}">${choice.label}</option>`)
+    .join("");
   state.blendModelMode = sanitizeBlendModel(state.modelMode, state.blendModelMode);
   blendSelect.value = state.blendModelMode;
   const active = state.blendModelMode !== "none";
@@ -1192,6 +1207,11 @@ async function fetchPlatformQuotes() {
   }
 }
 
+async function pollPlatformQuotes() {
+  await fetchPlatformQuotes();
+  render();
+}
+
 async function pollChainlink() {
   const pairs = Object.keys(FEEDS);
   await Promise.all(
@@ -1854,7 +1874,7 @@ function bindControls() {
     try {
       await loadConfigs();
       await loadAlphaProxies();
-      await fetchPlatformQuotes();
+      await pollPlatformQuotes();
       await pollChainlink();
       await pollTurbo();
       await pollTurboLegacyShort();
@@ -1876,7 +1896,7 @@ async function init() {
   await loadConfigs();
   await loadAlphaProxies();
   await preloadServerHistories();
-  await fetchPlatformQuotes();
+  await pollPlatformQuotes();
   await pollChainlink();
   await pollTurbo();
   await pollTurboLegacyShort();
@@ -1885,6 +1905,7 @@ async function init() {
   turboTimer = window.setInterval(pollTurbo, MARKET_POLL_MS);
   turboLegacyTimer = window.setInterval(pollTurboLegacyShort, MARKET_POLL_MS);
   marketTimer = window.setInterval(pollBinance, MARKET_POLL_MS);
+  platformTimer = window.setInterval(pollPlatformQuotes, PLATFORM_POLL_MS);
   snapshotTimer = window.setInterval(recordSnapshots, SNAPSHOT_MS);
   renderTimer = window.setInterval(render, RENDER_MS);
 }
