@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT || 8787);
 const execFileAsync = promisify(execFile);
-const LEGACY_TURBO_SHORT_MODEL_PATH = path.join(ROOT, "dev_handoff_20260606_final", "$repo", "live_mid_model_30s_best_trade_model.json");
+const LEGACY_TURBO_SHORT_MODEL_PATH = path.join(ROOT, "live_mid_model_30s_best_trade_model.json");
 const PYTHON_CANDIDATES = [
   process.env.PYTHON_BIN,
   process.env.PYTHON,
