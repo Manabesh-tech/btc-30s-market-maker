@@ -341,6 +341,7 @@ function syncBlendControls() {
   blendSelect.innerHTML = blendChoices
     .map((choice) => `<option value="${choice.value}">${choice.label}</option>`)
     .join("");
+  blendSelect.disabled = false;
   state.blendModelMode = sanitizeBlendModel(state.modelMode, state.blendModelMode);
   blendSelect.value = state.blendModelMode;
   const active = state.blendModelMode !== "none";
