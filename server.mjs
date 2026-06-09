@@ -15,6 +15,7 @@ const LEGACY_TURBO_SHORT_MODEL_PATH = path.join(ROOT, "live_mid_model_30s_best_t
 const PYTHON_CANDIDATES = [
   process.env.PYTHON_BIN,
   process.env.PYTHON,
+  "python3",
   process.env.CONDA_PYTHON_EXE,
   process.env.USERPROFILE ? path.join(process.env.USERPROFILE, "anaconda3", "python.exe") : null,
   process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "Python", "Python312", "python.exe") : null,
