@@ -96,6 +96,37 @@ PRODUCTION_BUCKET_OVERRIDES = {
     },
 }
 
+SHORT_TENOR_CONFIGS = {
+    "ETH/USDT::30s": {
+        "lookback_s": 30,
+        "base_payout_pct": 80.0,
+        "notes_source": "turbo_short_7d_replay",
+        "production_rationale": "7-day ETH turbo own-feed short-tenor replay. Uses a smoothed 30s own-feed move ladder with mild mean-reversion bias instead of leaving the product unavailable.",
+        "selection_metric": "Recovered from direct ETH turbo-feed replay after the earlier bundle left ETH 30s blank.",
+        "bucket_rules": [
+            {"label": "0-5", "mode": "mean_reversion", "min_abs_bp": 0.0, "max_abs_bp": 5.0, "danger_payout_pct": 65.0, "safe_payout_pct": 96.0, "p_up_if_move_positive": 0.495, "p_up_if_move_negative": 0.495, "chosen_win_rate_pct": 50.5},
+            {"label": "5-10", "mode": "mean_reversion", "min_abs_bp": 5.0, "max_abs_bp": 10.0, "danger_payout_pct": 65.0, "safe_payout_pct": 96.0, "p_up_if_move_positive": 0.480, "p_up_if_move_negative": 0.490, "chosen_win_rate_pct": 52.0},
+            {"label": "10-15", "mode": "mean_reversion", "min_abs_bp": 10.0, "max_abs_bp": 15.0, "danger_payout_pct": 65.0, "safe_payout_pct": 96.0, "p_up_if_move_positive": 0.472, "p_up_if_move_negative": 0.485, "chosen_win_rate_pct": 52.8},
+            {"label": "15-20", "mode": "mean_reversion", "min_abs_bp": 15.0, "max_abs_bp": 20.0, "danger_payout_pct": 65.0, "safe_payout_pct": 96.0, "p_up_if_move_positive": 0.445, "p_up_if_move_negative": 0.512, "chosen_win_rate_pct": 55.2},
+            {"label": "20+", "mode": "mean_reversion", "min_abs_bp": 20.0, "max_abs_bp": None, "danger_payout_pct": 65.0, "safe_payout_pct": 96.0, "p_up_if_move_positive": 0.465, "p_up_if_move_negative": 0.545, "chosen_win_rate_pct": 54.5},
+        ],
+    },
+    "ETH/USDT::1m": {
+        "lookback_s": 10,
+        "base_payout_pct": 80.0,
+        "notes_source": "turbo_short_7d_replay",
+        "production_rationale": "7-day ETH turbo own-feed short-tenor replay. Uses a smoothed 10s own-feed move ladder with the clearest observed ETH 1m mean-reversion effect.",
+        "selection_metric": "Recovered from direct ETH turbo-feed replay after the earlier bundle left ETH 1m blank.",
+        "bucket_rules": [
+            {"label": "0-5", "mode": "mean_reversion", "min_abs_bp": 0.0, "max_abs_bp": 5.0, "danger_payout_pct": 65.0, "safe_payout_pct": 96.0, "p_up_if_move_positive": 0.470, "p_up_if_move_negative": 0.510, "chosen_win_rate_pct": 53.0},
+            {"label": "5-10", "mode": "mean_reversion", "min_abs_bp": 5.0, "max_abs_bp": 10.0, "danger_payout_pct": 65.0, "safe_payout_pct": 96.0, "p_up_if_move_positive": 0.475, "p_up_if_move_negative": 0.535, "chosen_win_rate_pct": 53.5},
+            {"label": "10-15", "mode": "mean_reversion", "min_abs_bp": 10.0, "max_abs_bp": 15.0, "danger_payout_pct": 65.0, "safe_payout_pct": 96.0, "p_up_if_move_positive": 0.440, "p_up_if_move_negative": 0.535, "chosen_win_rate_pct": 56.0},
+            {"label": "15-20", "mode": "mean_reversion", "min_abs_bp": 15.0, "max_abs_bp": 20.0, "danger_payout_pct": 65.0, "safe_payout_pct": 96.0, "p_up_if_move_positive": 0.445, "p_up_if_move_negative": 0.500, "chosen_win_rate_pct": 55.5},
+            {"label": "20+", "mode": "mean_reversion", "min_abs_bp": 20.0, "max_abs_bp": None, "danger_payout_pct": 65.0, "safe_payout_pct": 96.0, "p_up_if_move_positive": 0.470, "p_up_if_move_negative": 0.530, "chosen_win_rate_pct": 53.0},
+        ],
+    },
+}
+
 
 def p_up_from_bucket_win_rates(mode: str, mean_reversion_win_rate_pct: float, momentum_win_rate_pct: float) -> tuple[float, float, float]:
     mr = float(mean_reversion_win_rate_pct) / 100.0
@@ -148,6 +179,39 @@ def build_disabled(pair: str, product: str, duration_s: int) -> dict:
     }
 
 
+def build_short_bucket_config(pair: str, product: str, duration_s: int, short_cfg: dict) -> dict:
+    return {
+        "pair": pair,
+        "symbol": PAIR_SYMBOLS[pair],
+        "product": product,
+        "duration_s": duration_s,
+        "entry_delay_s": 1,
+        "edge_pct": 4.0,
+        "favored_payout_floor": FLOOR,
+        "alpha": 1.0,
+        "margin": 0.0,
+        "engine": "turbo_bucket",
+        "active_mode": "neutral",
+        "lookback_s": int(short_cfg["lookback_s"]),
+        "base_payout_pct": float(short_cfg["base_payout_pct"]),
+        "model": {
+            "features": ["turbo_move_bp", "turbo_abs_move_bp", "platform_skew_pp"],
+        },
+        "notes": {
+            "family": "turbo",
+            "source": str(short_cfg["notes_source"]),
+            "production_rationale": str(short_cfg["production_rationale"]),
+            "selection_metric": str(short_cfg["selection_metric"]),
+            "implementation_mode": "turbo_family_monitor",
+        },
+        "neutral_band": 0.0,
+        "flip_signal": False,
+        "calibration": {"kind": "identity", "flip_signal": False},
+        "bucket_rules": short_cfg["bucket_rules"],
+        "overlays": [],
+    }
+
+
 def main() -> None:
     sched = pd.read_csv(SCHEDULE_PATH)
     summary = pd.read_csv(SUMMARY_PATH)
@@ -156,6 +220,12 @@ def main() -> None:
     configs: dict[str, dict] = {}
     for pair, product, duration_s in ALL_PRODUCTS:
         configs[f"{pair}::{product}"] = build_disabled(pair, product, duration_s)
+
+    for pair, product, duration_s in ALL_PRODUCTS:
+        key = f"{pair}::{product}"
+        short_cfg = SHORT_TENOR_CONFIGS.get(key)
+        if short_cfg:
+            configs[key] = build_short_bucket_config(pair, product, duration_s, short_cfg)
 
     summary_idx = {
         (row["pair_name"], row["product"]): row

@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT || 8787);
 const execFileAsync = promisify(execFile);
-const RUNTIME_STATE_PATH = process.env.RUNTIME_STATE_PATH || path.join(ROOT, "runtime_settings.json");
+const LEGACY_TURBO_SHORT_MODEL_PATH = path.join(ROOT, "live_mid_model_30s_best_trade_model.json");
 const PYTHON_CANDIDATES = [
   process.env.PYTHON_BIN,
   process.env.PYTHON,
@@ -30,19 +30,6 @@ const FEEDS = {
 const SYMBOLS = {
   "BTC/USDT": "BTCUSDT",
   "ETH/USDT": "ETHUSDT",
-};
-
-const PRODUCTS = new Set(["30s", "1m", "3m", "5m", "15m", "1h"]);
-const FAMILIES = new Set(["chainlink", "turbo"]);
-
-const DEFAULT_RUNTIME_SETTINGS = {
-  modelFamily: "chainlink",
-  selectedPair: "BTC/USDT",
-  selectedProduct: "30s",
-  edgePct: 7.0,
-  alphaOverride: null,
-  payoutFloorOverride: null,
-  updatedAt: Date.now(),
 };
 
 const TURBO_DB_CONFIG = {
@@ -68,6 +55,33 @@ const MIME_TYPES = {
   ".ico": "image/x-icon",
 };
 
+const LEGACY_TURBO_SHORT_MODEL = JSON.parse(fs.readFileSync(LEGACY_TURBO_SHORT_MODEL_PATH, "utf8"));
+const LEGACY_TURBO_SHORT_COEF = LEGACY_TURBO_SHORT_MODEL.coefficients || {};
+const LEGACY_TURBO_SHORT_HISTORY = [];
+const LEGACY_TURBO_SHORT_PRODUCT_STATE = {
+  "30s": { displayProbability: 0.5, quoteWindowStartTs: null },
+  "1m": { displayProbability: 0.5, quoteWindowStartTs: null },
+};
+const LEGACY_TURBO_SHORT_BASE = {
+  source: "Binance Futures BTCUSDT top-10 depth",
+  threshold: 0.5,
+  persist: 3.0,
+  triggeredProbability: 0.5924,
+  maxProbabilityPct: 60.0,
+  alphaMin: 0.05,
+  alphaMax: 0.18,
+  maxStepPerSecond: 0.006,
+  neutralSnapBand: 0.0015,
+  upliftLast7: {
+    "30s": 31617.229,
+    "1m": 1862.911,
+  },
+  stepScale: {
+    "30s": 1.0,
+    "1m": 0.8,
+  },
+};
+
 function resolvePythonCommand() {
   for (const candidate of PYTHON_CANDIDATES) {
     if (candidate === "python3" || candidate === "python" || candidate === "py") {
@@ -82,10 +96,6 @@ function resolvePythonCommand() {
 
 const PYTHON_CMD = resolvePythonCommand();
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
 function send(res, statusCode, body, contentType = "text/plain; charset=utf-8") {
   res.writeHead(statusCode, {
     "Content-Type": contentType,
@@ -96,74 +106,6 @@ function send(res, statusCode, body, contentType = "text/plain; charset=utf-8") 
 
 function sendJson(res, statusCode, payload) {
   send(res, statusCode, JSON.stringify(payload), "application/json; charset=utf-8");
-}
-
-function safeNumber(value) {
-  if (value == null || value === "") {
-    return null;
-  }
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
-}
-
-function normalizeRuntimeSettings(candidate = {}, base = DEFAULT_RUNTIME_SETTINGS) {
-  const next = { ...base };
-
-  if (FAMILIES.has(candidate.modelFamily)) {
-    next.modelFamily = candidate.modelFamily;
-  }
-  if (Object.prototype.hasOwnProperty.call(candidate, "selectedPair") && SYMBOLS[candidate.selectedPair]) {
-    next.selectedPair = candidate.selectedPair;
-  }
-  if (Object.prototype.hasOwnProperty.call(candidate, "selectedProduct") && PRODUCTS.has(candidate.selectedProduct)) {
-    next.selectedProduct = candidate.selectedProduct;
-  }
-
-  const edgePct = safeNumber(candidate.edgePct);
-  if (edgePct != null) {
-    next.edgePct = clamp(edgePct, 0, 20);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(candidate, "alphaOverride")) {
-    const alphaOverride = safeNumber(candidate.alphaOverride);
-    next.alphaOverride = alphaOverride == null ? null : clamp(alphaOverride, 0, 2);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(candidate, "payoutFloorOverride")) {
-    const payoutFloorOverride = safeNumber(candidate.payoutFloorOverride);
-    next.payoutFloorOverride = payoutFloorOverride == null ? null : clamp(payoutFloorOverride, 30, 120);
-  }
-
-  next.updatedAt = Date.now();
-  return next;
-}
-
-function loadRuntimeSettings() {
-  try {
-    if (!fs.existsSync(RUNTIME_STATE_PATH)) {
-      fs.writeFileSync(RUNTIME_STATE_PATH, JSON.stringify(DEFAULT_RUNTIME_SETTINGS, null, 2));
-      return { ...DEFAULT_RUNTIME_SETTINGS };
-    }
-    const parsed = JSON.parse(fs.readFileSync(RUNTIME_STATE_PATH, "utf8"));
-    return normalizeRuntimeSettings(parsed);
-  } catch (_error) {
-    return { ...DEFAULT_RUNTIME_SETTINGS, updatedAt: Date.now() };
-  }
-}
-
-function persistRuntimeSettings(next) {
-  fs.mkdirSync(path.dirname(RUNTIME_STATE_PATH), { recursive: true });
-  fs.writeFileSync(RUNTIME_STATE_PATH, JSON.stringify(next, null, 2));
-}
-
-async function readJsonBody(req) {
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
-  const body = Buffer.concat(chunks).toString("utf8").trim();
-  if (!body) return {};
-  return JSON.parse(body);
 }
 
 function decodeChainlinkMid(fullReport) {
@@ -271,6 +213,196 @@ with psycopg2.connect(**db) as conn:
   return JSON.parse(stdout.trim());
 }
 
+function sumLevels(levels, depth, mapper) {
+  return levels.slice(0, depth).reduce((sum, level) => sum + mapper(level), 0);
+}
+
+function stddev(values) {
+  if (!values.length) return 0;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+  return Math.sqrt(Math.max(variance, 0));
+}
+
+function clampValue(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function sigmoid(x) {
+  return 1 / (1 + Math.exp(-x));
+}
+
+function interpolateLegacyTurboHistory(secondsAgo, nowTs) {
+  const targetTs = nowTs - secondsAgo * 1000;
+  for (let i = LEGACY_TURBO_SHORT_HISTORY.length - 1; i >= 0; i -= 1) {
+    if (LEGACY_TURBO_SHORT_HISTORY[i].ts <= targetTs) {
+      return LEGACY_TURBO_SHORT_HISTORY[i];
+    }
+  }
+  return LEGACY_TURBO_SHORT_HISTORY[0] || null;
+}
+
+function legacyTurboPersistenceForThreshold(threshold) {
+  if (!LEGACY_TURBO_SHORT_HISTORY.length) return 0;
+  const last = LEGACY_TURBO_SHORT_HISTORY[LEGACY_TURBO_SHORT_HISTORY.length - 1];
+  const current = last.top5Imbalance;
+  const currentSign = current >= threshold ? 1 : current <= -threshold ? -1 : 0;
+  if (currentSign === 0) return 0;
+  let earliestTs = last.ts;
+  for (let i = LEGACY_TURBO_SHORT_HISTORY.length - 1; i >= 0; i -= 1) {
+    const item = LEGACY_TURBO_SHORT_HISTORY[i];
+    const value = item.top5Imbalance;
+    const sign = value >= threshold ? 1 : value <= -threshold ? -1 : 0;
+    if (sign !== currentSign) break;
+    earliestTs = item.ts;
+  }
+  return currentSign * Math.max(0, (last.ts - earliestTs) / 1000);
+}
+
+function fittedLegacyTurboShortProbability(features) {
+  let score = Number(LEGACY_TURBO_SHORT_COEF.intercept || 0);
+  for (let i = 0; i < LEGACY_TURBO_SHORT_MODEL.features.length; i += 1) {
+    const key = LEGACY_TURBO_SHORT_MODEL.features[i];
+    const raw = Number(features[key] ?? 0);
+    const mean = Number(LEGACY_TURBO_SHORT_COEF.means?.[i] ?? 0);
+    const scale = Math.max(Number(LEGACY_TURBO_SHORT_COEF.scales?.[i] ?? 1), 1e-9);
+    const coef = Number(LEGACY_TURBO_SHORT_COEF.coef?.[i] ?? 0);
+    const z = (raw - mean) / scale;
+    score += coef * z;
+  }
+  return sigmoid(score);
+}
+
+function summarizeLegacyTurboShort(probability) {
+  if (probability >= 0.58) return "Strong Up Pressure";
+  if (probability <= 0.42) return "Strong Down Pressure";
+  if (probability >= 0.53) return "Mild Up Pressure";
+  if (probability <= 0.47) return "Mild Down Pressure";
+  return "Neutral";
+}
+
+async function fetchLegacyTurboShortState(product) {
+  if (product !== "30s" && product !== "1m") {
+    throw new Error(`Unsupported legacy turbo short product: ${product}`);
+  }
+
+  const depthResp = await fetch("https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=10");
+  if (!depthResp.ok) {
+    throw new Error(`Turbo legacy depth ${depthResp.status}`);
+  }
+  const payload = await depthResp.json();
+  if (!Array.isArray(payload?.bids) || !Array.isArray(payload?.asks) || !payload.bids.length || !payload.asks.length) {
+    throw new Error("Turbo legacy depth payload missing bids/asks");
+  }
+
+  const bids = payload.bids.map(([price, qty]) => ({ price: Number(price), qty: Number(qty) })).filter((row) => Number.isFinite(row.price) && Number.isFinite(row.qty));
+  const asks = payload.asks.map(([price, qty]) => ({ price: Number(price), qty: Number(qty) })).filter((row) => Number.isFinite(row.price) && Number.isFinite(row.qty));
+  const bestBid = bids[0];
+  const bestAsk = asks[0];
+  if (!bestBid || !bestAsk || bestBid.price <= 0 || bestAsk.price <= 0) {
+    throw new Error("Turbo legacy best bid/ask missing");
+  }
+
+  const bidNotional5 = sumLevels(bids, 5, (level) => level.price * level.qty);
+  const askNotional5 = sumLevels(asks, 5, (level) => level.price * level.qty);
+  const bidSize5 = sumLevels(bids, 5, (level) => level.qty);
+  const askSize5 = sumLevels(asks, 5, (level) => level.qty);
+  const bidNotional10 = sumLevels(bids, 10, (level) => level.price * level.qty);
+  const askNotional10 = sumLevels(asks, 10, (level) => level.price * level.qty);
+  const bidSize10 = sumLevels(bids, 10, (level) => level.qty);
+  const askSize10 = sumLevels(asks, 10, (level) => level.qty);
+  const mid = (bestBid.price + bestAsk.price) / 2;
+  const microprice = ((bestAsk.price * bestBid.qty) + (bestBid.price * bestAsk.qty)) / Math.max(bestBid.qty + bestAsk.qty, 1e-9);
+  const micropriceDeviationBps = ((microprice - mid) / mid) * 10000;
+  const spreadBps = ((bestAsk.price - bestBid.price) / mid) * 10000;
+  const top5Imbalance = (bidNotional5 - askNotional5) / Math.max(bidNotional5 + askNotional5, 0.0001);
+  const top5SizeImbalance = (bidSize5 - askSize5) / Math.max(bidSize5 + askSize5, 0.0001);
+  const top10Imbalance = (bidNotional10 - askNotional10) / Math.max(bidNotional10 + askNotional10, 0.0001);
+  const top10SizeImbalance = (bidSize10 - askSize10) / Math.max(bidSize10 + askSize10, 0.0001);
+
+  const now = Date.now();
+  LEGACY_TURBO_SHORT_HISTORY.push({
+    ts: now,
+    mid,
+    top5Imbalance,
+    top10Imbalance,
+    top5SizeImbalance,
+    top10SizeImbalance,
+    totalDepth: bidNotional10 + askNotional10,
+  });
+  while (LEGACY_TURBO_SHORT_HISTORY.length > 120) {
+    LEGACY_TURBO_SHORT_HISTORY.shift();
+  }
+
+  const hist3 = interpolateLegacyTurboHistory(3, now);
+  const hist10 = interpolateLegacyTurboHistory(10, now);
+  const ret3 = hist3 ? ((mid - hist3.mid) / hist3.mid) * 10000 : 0;
+  const ret10 = hist10 ? ((mid - hist10.mid) / hist10.mid) * 10000 : 0;
+  const recentReturns = [];
+  for (let i = 1; i < LEGACY_TURBO_SHORT_HISTORY.length; i += 1) {
+    const prev = LEGACY_TURBO_SHORT_HISTORY[i - 1];
+    const curr = LEGACY_TURBO_SHORT_HISTORY[i];
+    recentReturns.push(((curr.mid - prev.mid) / prev.mid) * 10000);
+  }
+  const shortVol = stddev(recentReturns.slice(-10));
+  const totalDepths = LEGACY_TURBO_SHORT_HISTORY.map((row) => row.totalDepth).sort((a, b) => a - b);
+  const medianDepth = totalDepths.length ? totalDepths[Math.floor(totalDepths.length / 2)] : bidNotional10 + askNotional10;
+  const currentDepth = bidNotional10 + askNotional10;
+  const thinDepth = clampValue(1 - currentDepth / Math.max(medianDepth, 0.0001), 0, 1);
+
+  const featureVector = {
+    imb_top5_notional: top5Imbalance,
+    imb_top5_size: top5SizeImbalance,
+    imb_top10_notional: top10Imbalance,
+    imb_top10_size: top10SizeImbalance,
+    signed_persist_05: legacyTurboPersistenceForThreshold(0.5),
+    signed_persist_06: legacyTurboPersistenceForThreshold(0.6),
+    microprice_dev_bps: micropriceDeviationBps,
+    spread_bps: spreadBps,
+    vol_10s_bps: shortVol,
+    thin_depth: thinDepth,
+    ret_abs_3s: Math.abs(ret3),
+    ret_abs_10s: Math.abs(ret10),
+  };
+
+  const rawProbability = fittedLegacyTurboShortProbability(featureVector);
+  const maxProb = LEGACY_TURBO_SHORT_BASE.maxProbabilityPct / 100;
+  const targetProbability = clampValue(rawProbability, 0.5 - (maxProb - 0.5), 0.5 + (maxProb - 0.5));
+  const stateForProduct = LEGACY_TURBO_SHORT_PRODUCT_STATE[product];
+  const windowMs = 2000;
+  const windowStart = Math.floor(now / windowMs) * windowMs;
+  const stepScale = LEGACY_TURBO_SHORT_BASE.stepScale[product] || 1.0;
+  if (stateForProduct.quoteWindowStartTs !== windowStart) {
+    const prev = Number.isFinite(stateForProduct.displayProbability) ? stateForProduct.displayProbability : 0.5;
+    const dtSeconds = stateForProduct.quoteWindowStartTs == null ? windowMs / 1000 : clampValue((windowStart - stateForProduct.quoteWindowStartTs) / 1000, 0.25, 10);
+    const alpha = clampValue(dtSeconds / 6, LEGACY_TURBO_SHORT_BASE.alphaMin, LEGACY_TURBO_SHORT_BASE.alphaMax);
+    const candidateProbability = prev + alpha * (targetProbability - prev);
+    const maxStep = LEGACY_TURBO_SHORT_BASE.maxStepPerSecond * stepScale * dtSeconds;
+    let nextProbability = clampValue(prev + clampValue(candidateProbability - prev, -maxStep, maxStep), 0.5 - (maxProb - 0.5), 0.5 + (maxProb - 0.5));
+    if (Math.abs(nextProbability - 0.5) < LEGACY_TURBO_SHORT_BASE.neutralSnapBand) {
+      nextProbability = 0.5;
+    }
+    stateForProduct.displayProbability = nextProbability;
+    stateForProduct.quoteWindowStartTs = windowStart;
+  }
+
+  return {
+    pair: "BTC/USDT",
+    product,
+    source: LEGACY_TURBO_SHORT_BASE.source,
+    metricLabel: product,
+    rawProbability,
+    displayProbability: stateForProduct.displayProbability,
+    regime: summarizeLegacyTurboShort(rawProbability),
+    featureVector,
+    feedMid: mid,
+    spreadBps,
+    lookbackS: 10,
+    upliftLast7: LEGACY_TURBO_SHORT_BASE.upliftLast7[product],
+    updatedAt: now,
+  };
+}
+
 function safePathFromUrl(urlPath) {
   const pathname = decodeURIComponent(new URL(urlPath, "http://localhost").pathname);
   const relative = pathname === "/" ? "/index.html" : pathname;
@@ -279,31 +411,9 @@ function safePathFromUrl(urlPath) {
   return resolved;
 }
 
-let runtimeSettings = loadRuntimeSettings();
-
 const server = http.createServer((req, res) => {
   try {
     const requestUrl = new URL(req.url || "/", "http://localhost");
-    if (req.method === "GET" && requestUrl.pathname === "/api/runtime") {
-      sendJson(res, 200, runtimeSettings);
-      return;
-    }
-    if (req.method === "POST" && requestUrl.pathname === "/api/runtime") {
-      readJsonBody(req)
-        .then((body) => {
-          runtimeSettings = normalizeRuntimeSettings(body, runtimeSettings);
-          persistRuntimeSettings(runtimeSettings);
-          sendJson(res, 200, runtimeSettings);
-        })
-        .catch((error) => sendJson(res, 400, { error: error.message }));
-      return;
-    }
-    if (req.method === "POST" && requestUrl.pathname === "/api/runtime/reset") {
-      runtimeSettings = { ...DEFAULT_RUNTIME_SETTINGS, updatedAt: Date.now() };
-      persistRuntimeSettings(runtimeSettings);
-      sendJson(res, 200, runtimeSettings);
-      return;
-    }
     if (requestUrl.pathname === "/api/chainlink/latest") {
       const pair = requestUrl.searchParams.get("pair") || "";
       fetchChainlinkLatest(pair)
@@ -321,6 +431,13 @@ const server = http.createServer((req, res) => {
     if (requestUrl.pathname === "/api/turbo/latest") {
       const pair = requestUrl.searchParams.get("pair") || "";
       fetchTurboLatest(pair)
+        .then((payload) => sendJson(res, 200, payload))
+        .catch((error) => sendJson(res, 500, { error: error.message }));
+      return;
+    }
+    if (requestUrl.pathname === "/api/turbo/legacy-short") {
+      const product = requestUrl.searchParams.get("product") || "30s";
+      fetchLegacyTurboShortState(product)
         .then((payload) => sendJson(res, 200, payload))
         .catch((error) => sendJson(res, 500, { error: error.message }));
       return;

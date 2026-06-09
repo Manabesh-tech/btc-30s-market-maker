@@ -65,6 +65,37 @@
         gap: 16px;
         grid-template-columns: repeat(6, minmax(0, 1fr));
       }
+      .range-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      input[type="range"] {
+        width: 100%;
+      }
+      .blend-number {
+        width: 78px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px 10px;
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+      }
+      .blend-number:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      input[type="range"]:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .range-value {
+        min-width: 54px;
+        text-align: right;
+        font-size: 13px;
+        color: var(--muted);
+      }
       .quick-picks {
         display: grid;
         gap: 14px;
@@ -97,6 +128,11 @@
         font-weight: 600;
       }
       .quick-chip.active {
+        background: linear-gradient(135deg, #1f7a5a, #125d43);
+        color: #fff;
+        border-color: transparent;
+      }
+      .quick-chip[aria-pressed="true"] {
         background: linear-gradient(135deg, #1f7a5a, #125d43);
         color: #fff;
         border-color: transparent;
@@ -209,6 +245,35 @@
         grid-template-columns: 1.2fr 0.8fr;
         gap: 18px;
       }
+      .model-guide {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 18px;
+      }
+      .guide-card {
+        background: rgba(255,255,255,0.72);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+      }
+      .guide-card h3 {
+        font-size: 18px;
+        margin-bottom: 8px;
+      }
+      .guide-card p {
+        color: var(--muted);
+        line-height: 1.45;
+        margin-bottom: 10px;
+      }
+      .guide-card ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+      }
+      .guide-card li {
+        margin-bottom: 6px;
+      }
       table {
         width: 100%;
         border-collapse: collapse;
@@ -245,10 +310,10 @@
         font-size: 14px;
       }
       @media (max-width: 1100px) {
-        .hero, .two-col, .controls, .grid { grid-template-columns: 1fr 1fr; }
+        .hero, .two-col, .controls, .grid, .model-guide { grid-template-columns: 1fr 1fr; }
       }
       @media (max-width: 720px) {
-        .hero, .two-col, .controls, .grid { grid-template-columns: 1fr; }
+        .hero, .two-col, .controls, .grid, .model-guide { grid-template-columns: 1fr; }
         .shell { padding: 16px; }
       }
     </style>
@@ -259,19 +324,37 @@
         <div class="panel">
           <div class="eyebrow">Product Suite</div>
           <h1>Product Suite Console</h1>
-          <p>
-            Switch between the `chainlink model` and the `turbo model` for `30s`, `1m`, `3m`, `5m`, `15m`, and `1h`.
-            It shows the live fair-mid estimate, active skew logic, public implied edge/skew, and the current two-way quote at the selected edge.
+          <p id="hero-copy">
+            Compare `Chainlink Model 1`, `Model 2`, and `Model 3`, blend an alternate model into the deployed baseline,
+            and recompute the MID every second. It shows our live MID and quote, the all-in aggregate market quote, the current
+            deployed model, and the gap between our model and the public market.
           </p>
         </div>
         <div class="panel">
           <div class="eyebrow">Controls</div>
           <div class="controls">
-            <div>
-              <label for="family-select">Model</label>
-              <select id="family-select">
-                <option value="chainlink">Chainlink model</option>
-                <option value="turbo">Turbo model</option>
+            <div style="grid-column: 1 / -1;">
+              <label>Family</label>
+              <div id="family-tabs" class="quick-chip-list">
+                <button type="button" class="quick-chip" data-family="chainlink" aria-pressed="true">Chainlink</button>
+                <button type="button" class="quick-chip" data-family="turbo" aria-pressed="false">Turbo</button>
+              </div>
+            </div>
+            <div id="model-control">
+              <label for="model-select">Model</label>
+              <select id="model-select">
+                <option value="model1">Model 1</option>
+                <option value="model2">Model 2</option>
+                <option value="model3">Model 3</option>
+              </select>
+            </div>
+            <div id="blend-model-control">
+              <label for="blend-model-select">Blend With</label>
+              <select id="blend-model-select">
+                <option value="none">None</option>
+                <option value="model1">Model 1</option>
+                <option value="model2">Model 2</option>
+                <option value="model3">Model 3</option>
               </select>
             </div>
             <div>
@@ -285,10 +368,10 @@
             <div>
               <label for="edge-input">Edge %</label>
               <select id="edge-input">
-                <option value="7">7.0</option>
                 <option value="10">10.0</option>
                 <option value="9">9.0</option>
                 <option value="8">8.0</option>
+                <option value="7">7.0</option>
                 <option value="6">6.0</option>
                 <option value="5.5">5.5</option>
                 <option value="4">4.0</option>
@@ -301,7 +384,7 @@
               <label for="refresh-btn">Config</label>
               <button id="refresh-btn">Reload Models</button>
             </div>
-            <div>
+            <div id="alpha-control">
               <label for="alpha-override">Our Alpha</label>
               <select id="alpha-override">
                 <option value="auto">Auto</option>
@@ -313,6 +396,14 @@
                 <option value="1.25">1.25</option>
                 <option value="1.5">1.50</option>
               </select>
+            </div>
+            <div id="blend-weight-control">
+              <label for="blend-input">Blend Weight</label>
+              <div class="range-wrap">
+                <input id="blend-input" type="range" min="0" max="100" step="5" value="0" />
+                <input id="blend-number" class="blend-number" type="number" min="0" max="100" step="5" value="0" />
+                <span id="blend-value" class="range-value">0%</span>
+              </div>
             </div>
             <div class="quick-picks">
               <div class="quick-row">
@@ -343,14 +434,14 @@
           <div class="s" id="our-quote-note">Higher / Lower payouts</div>
         </div>
         <div class="metric">
-          <div class="k">Platform Quote</div>
+          <div class="k">Best Aggregate Quote</div>
           <div class="v" id="platform-quote">-</div>
-          <div class="s" id="platform-quote-note">Current public stream</div>
+          <div class="s" id="platform-quote-note">Current all-in public stream</div>
         </div>
         <div class="metric">
-          <div class="k">Model Prob</div>
+          <div class="k">Our MID</div>
           <div class="v" id="model-prob">-</div>
-          <div class="s" id="model-prob-note">Raw and adjusted</div>
+          <div class="s" id="model-prob-note">Selected / blended fair probability</div>
         </div>
       </section>
 
@@ -365,10 +456,20 @@
               <tr><th>Gap vs Spot</th><td id="gap-spot">-</td></tr>
               <tr><th>Gap vs Perp</th><td id="gap-perp">-</td></tr>
               <tr><th>Spot-Perp Spread</th><td id="spot-perp-spread">-</td></tr>
-              <tr><th>Platform Edge</th><td id="platform-edge">-</td></tr>
-              <tr><th>Platform Mid</th><td id="platform-mid">-</td></tr>
-              <tr><th>Platform Skew</th><td id="platform-skew">-</td></tr>
-              <tr><th>Our Fair Mid</th><td id="our-fair-mid">-</td></tr>
+              <tr><th>Aggregate Edge</th><td id="platform-edge">-</td></tr>
+              <tr><th>Aggregate MID</th><td id="platform-mid">-</td></tr>
+              <tr><th>Aggregate Skew</th><td id="platform-skew">-</td></tr>
+              <tr><th>Aggregate Owners</th><td id="platform-owners">-</td></tr>
+              <tr><th>Deployed Model</th><td id="deployed-model">-</td></tr>
+              <tr><th>Viewing Model</th><td id="viewing-model">-</td></tr>
+              <tr><th>Our MID</th><td id="our-fair-mid">-</td></tr>
+              <tr><th>Model 1 MID</th><td id="model1-mid">-</td></tr>
+              <tr><th>Model 2 MID</th><td id="model2-mid">-</td></tr>
+              <tr><th>Model 3 MID</th><td id="model3-mid">-</td></tr>
+              <tr><th>Blend MID</th><td id="blend-mid">-</td></tr>
+              <tr><th>Our MID vs Aggregate</th><td id="mid-gap-vs-aggregate">-</td></tr>
+              <tr><th>Active Driver</th><td id="active-driver">-</td></tr>
+              <tr><th>Active Lookback</th><td id="active-lookback">-</td></tr>
               <tr><th>Structural Spot Gap</th><td id="struct-spot">-</td></tr>
               <tr><th>Structural Perp Gap</th><td id="struct-perp">-</td></tr>
               <tr><th>Last Update</th><td id="last-update">-</td></tr>
@@ -386,6 +487,48 @@
         </div>
       </section>
 
+      <section class="model-guide">
+        <div class="guide-card">
+          <div class="eyebrow">Model 1</div>
+          <h3>Current Deployed Baseline</h3>
+          <p>
+            Basis-aware production model. `30s` and `1m` are basis-gated microstructure products.
+            Longer tenors use the currently selected best live rule per product.
+          </p>
+          <ul>
+            <li>`30s` and `1m`: basis/dislocation first, direction second</li>
+            <li>`3m+`: product-specific best production rule</li>
+            <li>Current deployed model across products unless changed later</li>
+          </ul>
+        </div>
+        <div class="guide-card">
+          <div class="eyebrow">Model 2</div>
+          <h3>Smoothed MR Variant</h3>
+          <p>
+            Keeps `30s` and `1m` unchanged, then replaces `3m+` with smoothed mean-reversion ladders.
+            Weak and noisy buckets are flattened toward `50/50`.
+          </p>
+          <ul>
+            <li>Short tenors stay on Model 1 logic</li>
+            <li>`3m+` switch to capped MR ladders</li>
+            <li>Useful when you think MR will reassert itself next week</li>
+          </ul>
+        </div>
+        <div class="guide-card">
+          <div class="eyebrow">Model 3</div>
+          <h3>Fixed-Window Chainlink MR</h3>
+          <p>
+            Chainlink-only ladder architecture for `3m+`: `2m` lookback on `3m/5m/15m`, and `20m`
+            lookback on `1h`, all quoted from smoothed MR ladders.
+          </p>
+          <ul>
+            <li>`3m`, `5m`, `15m`: Chainlink `120s` move</li>
+            <li>`1h`: Chainlink `1200s` move</li>
+            <li>Clean, stable, easier to explain than many product-specific windows</li>
+          </ul>
+        </div>
+      </section>
+
       <section class="panel" style="margin-top:18px;">
         <div class="eyebrow">Feature Vector</div>
         <table>
@@ -396,6 +539,6 @@
         </table>
       </section>
     </div>
-    <script src="./live_chainlink_product_suite_console.js?v=20260607-renderfix"></script>
+    <script src="./live_chainlink_product_suite_console.js?v=20260608g"></script>
   </body>
 </html>

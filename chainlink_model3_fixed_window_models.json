@@ -114,7 +114,8 @@
         "winner_test_auc": 0.5008824274199286
       },
       "production_rationale": "BTC 30s now uses shared Spot 10s momentum pricing across all models.",
-      "implementation_mode": "single_final_monitor"
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_short_tenor_same_as_model1"
     },
     "neutral_band": 0.0,
     "flip_signal": true,
@@ -358,7 +359,8 @@
         "winner_test_auc": 0.5142321223491318
       },
       "production_rationale": "BTC 1m now uses shared Chainlink 10s mean-reversion pricing across all models.",
-      "implementation_mode": "single_final_monitor"
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_short_tenor_same_as_model1"
     },
     "neutral_band": 0.01,
     "flip_signal": false,
@@ -493,105 +495,13 @@
       "perp_gap_bp": 10.362021972359146
     },
     "model": {
-      "features": [
-        "gap_spot_bp",
-        "gap_perp_bp",
-        "spot_perp_spread_bp",
-        "delta_gap_spot_1u",
-        "delta_gap_perp_1u",
-        "delta_gap_spot_2u",
-        "delta_gap_perp_2u",
-        "spot_ret_1u_bp",
-        "perp_ret_1u_bp",
-        "chain_ret_1u_bp",
-        "spot_ret_2u_bp",
-        "perp_ret_2u_bp",
-        "chain_ret_2u_bp",
-        "gap_spot_z_12",
-        "gap_perp_z_12",
-        "spot_vol_6u",
-        "perp_vol_6u",
-        "chain_vol_6u",
-        "gap_sign_agree",
-        "delta_sign_agree",
-        "basis_pressure"
-      ],
-      "intercept": 0.0034135866355866676,
-      "coef": [
-        0.04584595050816558,
-        0.043693441017963595,
-        -0.004824323986459966,
-        -0.05099997573053819,
-        0.03693813106052024,
-        -0.007333929315886005,
-        -0.07393209359805833,
-        -0.0032530908975496563,
-        0.006550258879254602,
-        0.0015744389316763303,
-        -0.01409504825249163,
-        -0.020297831530763196,
-        -0.010394951641141823,
-        0.04103410387143817,
-        0.12847395346718904,
-        0.5624207218427154,
-        -0.2117225773737237,
-        -0.4629210291744466,
-        0.0,
-        -0.0722586240953817,
-        0.0048243239864455304
-      ],
-      "means": [
-        14.664696424344644,
-        10.362021972359146,
-        4.302674451985497,
-        0.00160574827439725,
-        0.002202361541275642,
-        0.002310043800059707,
-        0.0034868708371377454,
-        -0.26956382624626285,
-        -0.2689206130253045,
-        -0.2711774526721187,
-        -0.5353796481506705,
-        -0.5341591697984224,
-        -0.5377566258934247,
-        0.015807253219093167,
-        0.01050992325284211,
-        6.432625571550629,
-        6.48503644375752,
-        6.386883318492937,
-        1.0,
-        0.21458333333333332,
-        -4.302674451985497
-      ],
-      "scales": [
-        1.962524082300873,
-        2.1560718887159176,
-        0.8773079842347504,
-        1.0848587567469081,
-        1.2143710683890234,
-        1.1324211219172007,
-        1.2258534477387366,
-        9.497537661997319,
-        9.534649620059765,
-        9.472869924459877,
-        13.643922277253932,
-        13.660900253708672,
-        13.631478349053372,
-        1.0005837686321535,
-        0.991162352458911,
-        6.959186709909892,
-        6.977741997443962,
-        6.968605209567315,
-        1.0,
-        0.9767056839476033,
-        0.8773079842347505
-      ]
+      "features": []
     },
     "notes": {
       "basis_story": "Chainlink settled products lean on spot/perp basis, basis change, and return/vol context rather than raw orderbook pressure.",
       "selection_metric": "Best calibrated fair-probability estimate on actual historical trade timestamps.",
       "deployment_profile": "production_final",
-      "starter_logic": "Production final: calibrated Chainlink fair-mid model everywhere, plus delayed basis and longer-horizon mean-reversion overlays where replay supported them.",
+      "starter_logic": "Model 3: fixed-window Chainlink logic. Use 2m lookback for 3m/5m/15m and 20m lookback for 1h, then apply smoothed MR ladders.",
       "calibration_kind": "isotonic",
       "calibration_summary": {
         "samples": 14454,
@@ -616,8 +526,9 @@
         "winner_test_logloss": 0.6941146066720171,
         "winner_test_auc": 0.4977312563549498
       },
-      "production_rationale": "Explicit BTC 3m mean-reversion overlay. When recent 3m spot move is stretched and gap-delta is active, lean against the move.",
-      "implementation_mode": "single_final_monitor"
+      "production_rationale": "Fixed-window architecture chosen for robustness and consistency across products, with smoothed MR ladders to reduce recent-window overfit.",
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_fixed_window"
     },
     "neutral_band": 0.0,
     "flip_signal": true,
@@ -654,27 +565,50 @@
       ]
     },
     "active_mode": "neutral",
-    "overlays": [
+    "overlays": [],
+    "engine": "chainlink_bucket",
+    "lookback_s": 120,
+    "signal_source": "chainlink",
+    "bucket_rules": [
       {
-        "type": "gated_directional_override",
-        "gate_metric": "delta_gap_spot_1u",
-        "signal_metric": "spot_ret_1u_bp",
-        "default_prob_up": 0.5,
-        "label": "btc3m_mean_reversion",
-        "bands": [
-          {
-            "min_abs_gate_bp": 3.0,
-            "prob_up_if_signal_positive": 0.44,
-            "prob_up_if_signal_negative": 0.56,
-            "label": "btc3m_strong_mean_reversion"
-          },
-          {
-            "min_abs_gate_bp": 2.0,
-            "prob_up_if_signal_positive": 0.46,
-            "prob_up_if_signal_negative": 0.54,
-            "label": "btc3m_mild_mean_reversion"
-          }
-        ]
+        "label": "0-4bp",
+        "min_abs_bp": 0,
+        "max_abs_bp": 4,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.47,
+        "p_up_if_move_negative": 0.53
+      },
+      {
+        "label": "12-20bp",
+        "min_abs_bp": 12,
+        "max_abs_bp": 20,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.45,
+        "p_up_if_move_negative": 0.55
+      },
+      {
+        "label": "20+bp",
+        "min_abs_bp": 20,
+        "max_abs_bp": null,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.46,
+        "p_up_if_move_negative": 0.59
+      },
+      {
+        "label": "4-8bp",
+        "min_abs_bp": 4,
+        "max_abs_bp": 8,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.47,
+        "p_up_if_move_negative": 0.53
+      },
+      {
+        "label": "8-12bp",
+        "min_abs_bp": 8,
+        "max_abs_bp": 12,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.44,
+        "p_up_if_move_negative": 0.56
       }
     ]
   },
@@ -693,105 +627,13 @@
       "perp_gap_bp": 10.355264927767264
     },
     "model": {
-      "features": [
-        "gap_spot_bp",
-        "gap_perp_bp",
-        "spot_perp_spread_bp",
-        "delta_gap_spot_1u",
-        "delta_gap_perp_1u",
-        "delta_gap_spot_2u",
-        "delta_gap_perp_2u",
-        "spot_ret_1u_bp",
-        "perp_ret_1u_bp",
-        "chain_ret_1u_bp",
-        "spot_ret_2u_bp",
-        "perp_ret_2u_bp",
-        "chain_ret_2u_bp",
-        "gap_spot_z_12",
-        "gap_perp_z_12",
-        "spot_vol_6u",
-        "perp_vol_6u",
-        "chain_vol_6u",
-        "gap_sign_agree",
-        "delta_sign_agree",
-        "basis_pressure"
-      ],
-      "intercept": 0.027632363030564704,
-      "coef": [
-        7.674676736841415e-05,
-        0.02131018172970487,
-        -0.050744727166605504,
-        -0.02755085095779998,
-        -0.12040641836629554,
-        -0.020743628612508294,
-        0.09780161160216168,
-        0.023652850085264073,
-        0.012710960761968542,
-        0.025513187360981637,
-        -0.00047169659633555317,
-        0.007906924640576062,
-        0.00019292712599626487,
-        0.11206369643909556,
-        0.0026825243003526554,
-        0.4354956470471505,
-        -0.24093477736893254,
-        -0.24261415606741593,
-        0.0,
-        -0.0849735736763635,
-        0.05074472716662035
-      ],
-      "means": [
-        14.642314397180277,
-        10.355264927767264,
-        4.287049469413013,
-        0.0017607424992364077,
-        0.002894758440331314,
-        0.003896932671646622,
-        0.0062860717373822315,
-        -0.4564758974496711,
-        -0.4553329279847804,
-        -0.4583234535624292,
-        -0.8991266508886148,
-        -0.8968321399651926,
-        -0.9030526924868986,
-        0.009948920153006413,
-        0.01156917509860771,
-        8.436185968926567,
-        8.420035608266387,
-        8.312566839497864,
-        1.0,
-        0.2777777777777778,
-        -4.287049469413013
-      ],
-      "scales": [
-        2.00893428191056,
-        2.177097652446437,
-        0.9112309787995015,
-        1.25583164421144,
-        1.1894490410434857,
-        1.2415922312650565,
-        1.2470208201407593,
-        12.271074305339338,
-        12.20490994749815,
-        12.145242537290265,
-        17.58104865685436,
-        17.508712693290043,
-        17.502211977571783,
-        1.0047092246222822,
-        1.0054114495688071,
-        8.880711123377623,
-        8.802996632032741,
-        8.800782749158865,
-        1.0,
-        0.9606453592105878,
-        0.9112309787995014
-      ]
+      "features": []
     },
     "notes": {
       "basis_story": "Chainlink settled products lean on spot/perp basis, basis change, and return/vol context rather than raw orderbook pressure.",
       "selection_metric": "Best calibrated fair-probability estimate on actual historical trade timestamps.",
       "deployment_profile": "production_final",
-      "starter_logic": "Production final: calibrated Chainlink fair-mid model everywhere, plus delayed basis and longer-horizon mean-reversion overlays where replay supported them.",
+      "starter_logic": "Model 3: fixed-window Chainlink logic. Use 2m lookback for 3m/5m/15m and 20m lookback for 1h, then apply smoothed MR ladders.",
       "calibration_kind": "identity",
       "calibration_summary": {
         "samples": 4968,
@@ -816,8 +658,9 @@
         "winner_test_logloss": 0.6862471713942343,
         "winner_test_auc": 0.538441040155412
       },
-      "production_rationale": "No reliable fair-mid edge from current features; quote flat.",
-      "implementation_mode": "single_final_monitor"
+      "production_rationale": "Fixed-window architecture chosen for robustness and consistency across products, with smoothed MR ladders to reduce recent-window overfit.",
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_fixed_window"
     },
     "neutral_band": 0.0,
     "flip_signal": true,
@@ -826,7 +669,52 @@
       "kind": "identity"
     },
     "active_mode": "neutral",
-    "overlays": []
+    "overlays": [],
+    "engine": "chainlink_bucket",
+    "lookback_s": 120,
+    "signal_source": "chainlink",
+    "bucket_rules": [
+      {
+        "label": "0-4bp",
+        "min_abs_bp": 0,
+        "max_abs_bp": 4,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.49,
+        "p_up_if_move_negative": 0.51
+      },
+      {
+        "label": "12-20bp",
+        "min_abs_bp": 12,
+        "max_abs_bp": 20,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.4571,
+        "p_up_if_move_negative": 0.58
+      },
+      {
+        "label": "20+bp",
+        "min_abs_bp": 20,
+        "max_abs_bp": null,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.42,
+        "p_up_if_move_negative": 0.56
+      },
+      {
+        "label": "4-8bp",
+        "min_abs_bp": 4,
+        "max_abs_bp": 8,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.49,
+        "p_up_if_move_negative": 0.51
+      },
+      {
+        "label": "8-12bp",
+        "min_abs_bp": 8,
+        "max_abs_bp": 12,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.38,
+        "p_up_if_move_negative": 0.55
+      }
+    ]
   },
   "BTC/USDT::15m": {
     "pair": "BTC/USDT",
@@ -843,105 +731,13 @@
       "perp_gap_bp": 10.45635951023814
     },
     "model": {
-      "features": [
-        "gap_spot_bp",
-        "gap_perp_bp",
-        "spot_perp_spread_bp",
-        "delta_gap_spot_1u",
-        "delta_gap_perp_1u",
-        "delta_gap_spot_2u",
-        "delta_gap_perp_2u",
-        "spot_ret_1u_bp",
-        "perp_ret_1u_bp",
-        "chain_ret_1u_bp",
-        "spot_ret_2u_bp",
-        "perp_ret_2u_bp",
-        "chain_ret_2u_bp",
-        "gap_spot_z_12",
-        "gap_perp_z_12",
-        "spot_vol_6u",
-        "perp_vol_6u",
-        "chain_vol_6u",
-        "gap_sign_agree",
-        "delta_sign_agree",
-        "basis_pressure"
-      ],
-      "intercept": -0.008848604491830976,
-      "coef": [
-        0.03383736401413285,
-        0.014706606542232627,
-        0.04027147864443972,
-        0.1482257913071167,
-        -0.26203750237550916,
-        0.02547972032123593,
-        0.053233602261838,
-        -0.0012362705051247235,
-        -0.03129590155848947,
-        -0.007810565828365269,
-        0.001795021075290193,
-        0.004192757147448537,
-        0.0015500008686096223,
-        -0.08380413657655587,
-        0.2690174422106152,
-        -0.029371834873658673,
-        -0.12951914709022475,
-        -0.012245239203219361,
-        0.0,
-        0.16964789392323695,
-        -0.04027147864442158
-      ],
-      "means": [
-        14.700693185312685,
-        10.45635951023814,
-        4.244333675074545,
-        0.0042235042698762675,
-        0.007090370909170648,
-        0.010718665494374066,
-        0.017517529823718132,
-        -1.2919339121185927,
-        -1.2889205355524709,
-        -1.296627534789121,
-        -2.5298096353298978,
-        -2.5233680381038632,
-        -2.5406197708042533,
-        0.02429174537691142,
-        0.048403868899240754,
-        14.538347691540874,
-        14.457115184545877,
-        14.489943225354816,
-        1.0,
-        0.3472222222222222,
-        -4.244333675074545
-      ],
-      "scales": [
-        1.9918338563307005,
-        2.158386042587542,
-        0.8853877274430351,
-        1.447210719101286,
-        1.4057968376031411,
-        1.4655860038854704,
-        1.5071457890144548,
-        21.409123987051444,
-        21.356203372515157,
-        21.38725952490338,
-        30.125489687707567,
-        29.94638204495148,
-        30.086988297205483,
-        1.0179183892360393,
-        1.0035971145747227,
-        11.975027504819192,
-        11.975631303299693,
-        12.005940713567606,
-        1.0,
-        0.9377828791330441,
-        0.8853877274430352
-      ]
+      "features": []
     },
     "notes": {
       "basis_story": "Chainlink settled products lean on spot/perp basis, basis change, and return/vol context rather than raw orderbook pressure.",
       "selection_metric": "Best calibrated fair-probability estimate on actual historical trade timestamps.",
       "deployment_profile": "production_final",
-      "starter_logic": "Production final: calibrated Chainlink fair-mid model everywhere, plus delayed basis and longer-horizon mean-reversion overlays where replay supported them.",
+      "starter_logic": "Model 3: fixed-window Chainlink logic. Use 2m lookback for 3m/5m/15m and 20m lookback for 1h, then apply smoothed MR ladders.",
       "calibration_kind": "platt",
       "calibration_summary": {
         "samples": 4296,
@@ -966,8 +762,9 @@
         "winner_test_logloss": 0.6921086677564078,
         "winner_test_auc": 0.5187314888391245
       },
-      "production_rationale": "Strong BTC 15m mean-reversion overlay on widening gap-delta states.",
-      "implementation_mode": "single_final_monitor"
+      "production_rationale": "Fixed-window architecture chosen for robustness and consistency across products, with smoothed MR ladders to reduce recent-window overfit.",
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_fixed_window"
     },
     "neutral_band": 0.0,
     "flip_signal": false,
@@ -978,21 +775,50 @@
       "intercept": -0.09008742239039251
     },
     "active_mode": "neutral",
-    "overlays": [
+    "overlays": [],
+    "engine": "chainlink_bucket",
+    "lookback_s": 120,
+    "signal_source": "chainlink",
+    "bucket_rules": [
       {
-        "type": "gated_directional_override",
-        "gate_metric": "delta_gap_spot_1u",
-        "signal_metric": "delta_gap_spot_1u",
-        "default_prob_up": 0.5,
-        "label": "btc15m_mean_reversion",
-        "bands": [
-          {
-            "min_abs_gate_bp": 2.0,
-            "prob_up_if_signal_positive": 0.4,
-            "prob_up_if_signal_negative": 0.6,
-            "label": "btc15m_strong_mean_reversion"
-          }
-        ]
+        "label": "0-4bp",
+        "min_abs_bp": 0,
+        "max_abs_bp": 4,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.49,
+        "p_up_if_move_negative": 0.51
+      },
+      {
+        "label": "12-20bp",
+        "min_abs_bp": 12,
+        "max_abs_bp": 20,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.39,
+        "p_up_if_move_negative": 0.61
+      },
+      {
+        "label": "20+bp",
+        "min_abs_bp": 20,
+        "max_abs_bp": null,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.38,
+        "p_up_if_move_negative": 0.62
+      },
+      {
+        "label": "4-8bp",
+        "min_abs_bp": 4,
+        "max_abs_bp": 8,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.4505,
+        "p_up_if_move_negative": 0.5504
+      },
+      {
+        "label": "8-12bp",
+        "min_abs_bp": 8,
+        "max_abs_bp": 12,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.4048,
+        "p_up_if_move_negative": 0.6
       }
     ]
   },
@@ -1011,81 +837,13 @@
       "perp_gap_bp": 10.62391108578182
     },
     "model": {
-      "features": [
-        "gap_spot_bp",
-        "gap_perp_bp",
-        "spot_perp_spread_bp",
-        "delta_gap_spot_1u",
-        "delta_gap_perp_1u",
-        "delta_gap_spot_2u",
-        "delta_gap_perp_2u",
-        "spot_ret_1u_bp",
-        "perp_ret_1u_bp",
-        "chain_ret_1u_bp",
-        "gap_spot_z_12",
-        "gap_perp_z_12",
-        "spot_vol_6u",
-        "perp_vol_6u",
-        "chain_vol_6u"
-      ],
-      "intercept": -0.029045979386858253,
-      "coef": [
-        0.06483904440855262,
-        0.13076161802578062,
-        -0.1660836960630668,
-        0.3597764954418403,
-        -0.3653031901733076,
-        0.18507678217110438,
-        -0.375616111101972,
-        0.021617286777408668,
-        -0.02435864213580243,
-        0.0009331933113478365,
-        -0.10536319771354268,
-        0.11275499251240813,
-        -0.01175109770830314,
-        -0.00024273738905995486,
-        -0.07281717551716817
-      ],
-      "means": [
-        14.949284758488192,
-        10.62391108578182,
-        4.325373672706371,
-        0.02987705515728229,
-        0.04429411493771813,
-        0.038596425900149285,
-        0.05960832109021257,
-        -2.8233255750336075,
-        -2.807599644601206,
-        -2.855233287328901,
-        0.12137282326290445,
-        0.04331102945621396,
-        27.643797608426738,
-        27.505270278093857,
-        27.690624835693683
-      ],
-      "scales": [
-        2.1168787372908113,
-        2.2742041622755216,
-        0.9641056004954585,
-        1.8814093702561023,
-        1.872378575104181,
-        1.919019139125378,
-        1.9405180859153537,
-        30.57056487463228,
-        30.397508821957615,
-        30.52053815728332,
-        1.0333727330790048,
-        1.0228556884291085,
-        15.245180538685684,
-        15.126244288101123,
-        15.020755392721718
-      ]
+      "features": []
     },
     "notes": {
       "basis_story": "Chainlink settled products lean on spot/perp basis, basis change, and return/vol context rather than raw orderbook pressure.",
       "selection_metric": "Best calibrated fair-probability estimate on actual historical trade timestamps.",
       "deployment_profile": "production_final",
-      "starter_logic": "Production final: calibrated Chainlink fair-mid model everywhere, plus delayed basis and longer-horizon mean-reversion overlays where replay supported them.",
+      "starter_logic": "Model 3: fixed-window Chainlink logic. Use 2m lookback for 3m/5m/15m and 20m lookback for 1h, then apply smoothed MR ladders.",
       "calibration_kind": "identity",
       "calibration_summary": {
         "samples": 1116,
@@ -1110,8 +868,9 @@
         "winner_test_logloss": 0.6347884898957841,
         "winner_test_auc": 0.7266741330037847
       },
-      "production_rationale": "Base fair-mid model plus a BTC 1h momentum overlay in large gap-delta states.",
-      "implementation_mode": "single_final_monitor"
+      "production_rationale": "Fixed-window architecture chosen for robustness and consistency across products, with smoothed MR ladders to reduce recent-window overfit.",
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_fixed_window"
     },
     "neutral_band": 0.0,
     "flip_signal": false,
@@ -1120,21 +879,50 @@
       "kind": "identity"
     },
     "active_mode": "neutral",
-    "overlays": [
+    "overlays": [],
+    "engine": "chainlink_bucket",
+    "lookback_s": 1200,
+    "signal_source": "chainlink",
+    "bucket_rules": [
       {
-        "type": "gated_directional_override",
-        "gate_metric": "delta_gap_spot_1u",
-        "signal_metric": "chain_ret_1u_bp",
-        "default_prob_up": 0.5,
-        "label": "btc1h_momentum",
-        "bands": [
-          {
-            "min_abs_gate_bp": 3.0,
-            "prob_up_if_signal_positive": 0.6,
-            "prob_up_if_signal_negative": 0.4,
-            "label": "btc1h_momentum_gate3"
-          }
-        ]
+        "label": "0-4bp",
+        "min_abs_bp": 0,
+        "max_abs_bp": 4,
+        "mode": "flat",
+        "p_up_if_move_positive": 0.5,
+        "p_up_if_move_negative": 0.5
+      },
+      {
+        "label": "12-20bp",
+        "min_abs_bp": 12,
+        "max_abs_bp": 20,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.42,
+        "p_up_if_move_negative": 0.58
+      },
+      {
+        "label": "20+bp",
+        "min_abs_bp": 20,
+        "max_abs_bp": null,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.43,
+        "p_up_if_move_negative": 0.5789
+      },
+      {
+        "label": "4-8bp",
+        "min_abs_bp": 4,
+        "max_abs_bp": 8,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.4,
+        "p_up_if_move_negative": 0.54
+      },
+      {
+        "label": "8-12bp",
+        "min_abs_bp": 8,
+        "max_abs_bp": 12,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.39,
+        "p_up_if_move_negative": 0.56
       }
     ]
   },
@@ -1277,7 +1065,8 @@
         "winner_test_auc": 0.5311113262342692
       },
       "production_rationale": "Base fair-mid model plus a light ETH 30s momentum overlay when gap-delta exceeds 2bp.",
-      "implementation_mode": "single_final_monitor"
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_short_tenor_same_as_model1"
     },
     "neutral_band": 0.015,
     "flip_signal": false,
@@ -1475,7 +1264,8 @@
         "winner_test_auc": 0.526064705882353
       },
       "production_rationale": "Base fair-mid model plus a stronger ETH 1m momentum overlay when gap-delta exceeds 3bp.",
-      "implementation_mode": "single_final_monitor"
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_short_tenor_same_as_model1"
     },
     "neutral_band": 0.01,
     "flip_signal": false,
@@ -1553,105 +1343,13 @@
       "perp_gap_bp": 9.808794537265477
     },
     "model": {
-      "features": [
-        "gap_spot_bp",
-        "gap_perp_bp",
-        "spot_perp_spread_bp",
-        "delta_gap_spot_1u",
-        "delta_gap_perp_1u",
-        "delta_gap_spot_2u",
-        "delta_gap_perp_2u",
-        "spot_ret_1u_bp",
-        "perp_ret_1u_bp",
-        "chain_ret_1u_bp",
-        "spot_ret_2u_bp",
-        "perp_ret_2u_bp",
-        "chain_ret_2u_bp",
-        "gap_spot_z_12",
-        "gap_perp_z_12",
-        "spot_vol_6u",
-        "perp_vol_6u",
-        "chain_vol_6u",
-        "gap_sign_agree",
-        "delta_sign_agree",
-        "basis_pressure"
-      ],
-      "intercept": 0.007107400772156924,
-      "coef": [
-        0.042782922109454426,
-        0.03580642475662067,
-        0.012368114820008493,
-        0.02029531832555329,
-        -0.054399092452604325,
-        -0.12774684643875983,
-        0.08495057649397435,
-        0.024459964355797722,
-        0.011739848387670856,
-        0.02168353866625743,
-        -0.051792097175462806,
-        -0.029567843137433863,
-        -0.0369236718746302,
-        0.0936300957773471,
-        0.08616940471062808,
-        0.14757938735833434,
-        -0.08460705234539942,
-        -0.08359218110594645,
-        -0.04782502476374541,
-        0.015253834029651395,
-        -0.01236811482000363
-      ],
-      "means": [
-        14.327789067558683,
-        9.808794537265477,
-        4.518994530293205,
-        0.0018499569274271121,
-        0.0022964247888460966,
-        0.001650893111612995,
-        0.003265097149809595,
-        -0.17133861356409735,
-        -0.1708274938029414,
-        -0.17325583611996054,
-        -0.3360361096435163,
-        -0.33435337427245543,
-        -0.33778956316112935,
-        0.014789535035007854,
-        0.015024003271876469,
-        8.036717820087217,
-        8.110340467274051,
-        7.9570750877524,
-        0.9972222222222222,
-        0.36041666666666666,
-        -4.518994530293205
-      ],
-      "scales": [
-        2.1201490335596045,
-        2.205311845137112,
-        0.9493636246356915,
-        1.4602524929801692,
-        1.4678436488072035,
-        1.4777345003632811,
-        1.549249159872259,
-        9.600199470849594,
-        9.664240597140529,
-        9.517568531592369,
-        13.765057836101729,
-        13.813277130436312,
-        13.691979208211517,
-        0.9831285879004964,
-        0.9961900076717433,
-        5.204546073001389,
-        5.226497082225882,
-        5.166737461377475,
-        0.07448382043217733,
-        0.9327914163353396,
-        0.9493636246356915
-      ]
+      "features": []
     },
     "notes": {
       "basis_story": "Chainlink settled products lean on spot/perp basis, basis change, and return/vol context rather than raw orderbook pressure.",
       "selection_metric": "Best calibrated fair-probability estimate on actual historical trade timestamps.",
       "deployment_profile": "production_final",
-      "starter_logic": "Production final: calibrated Chainlink fair-mid model everywhere, plus delayed basis and longer-horizon mean-reversion overlays where replay supported them.",
+      "starter_logic": "Model 3: fixed-window Chainlink logic. Use 2m lookback for 3m/5m/15m and 20m lookback for 1h, then apply smoothed MR ladders.",
       "calibration_kind": "platt",
       "calibration_summary": {
         "samples": 4641,
@@ -1676,8 +1374,9 @@
         "winner_test_logloss": 0.6961111193927174,
         "winner_test_auc": 0.4917145671500356
       },
-      "production_rationale": "Base fair-mid model plus an ETH 3m momentum overlay on large gap-delta states.",
-      "implementation_mode": "single_final_monitor"
+      "production_rationale": "Fixed-window architecture chosen for robustness and consistency across products, with smoothed MR ladders to reduce recent-window overfit.",
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_fixed_window"
     },
     "neutral_band": 0.0,
     "flip_signal": false,
@@ -1688,21 +1387,50 @@
       "intercept": -0.014221145406646412
     },
     "active_mode": "neutral",
-    "overlays": [
+    "overlays": [],
+    "engine": "chainlink_bucket",
+    "lookback_s": 120,
+    "signal_source": "chainlink",
+    "bucket_rules": [
       {
-        "type": "gated_directional_override",
-        "gate_metric": "delta_gap_spot_1u",
-        "signal_metric": "spot_ret_1u_bp",
-        "default_prob_up": 0.5,
-        "label": "eth3m_momentum",
-        "bands": [
-          {
-            "min_abs_gate_bp": 3.0,
-            "prob_up_if_signal_positive": 0.58,
-            "prob_up_if_signal_negative": 0.42,
-            "label": "eth3m_momentum_gate3"
-          }
-        ]
+        "label": "0-4bp",
+        "min_abs_bp": 0,
+        "max_abs_bp": 4,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.47,
+        "p_up_if_move_negative": 0.53
+      },
+      {
+        "label": "12-20bp",
+        "min_abs_bp": 12,
+        "max_abs_bp": 20,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.4,
+        "p_up_if_move_negative": 0.55
+      },
+      {
+        "label": "20+bp",
+        "min_abs_bp": 20,
+        "max_abs_bp": null,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.46,
+        "p_up_if_move_negative": 0.59
+      },
+      {
+        "label": "4-8bp",
+        "min_abs_bp": 4,
+        "max_abs_bp": 8,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.47,
+        "p_up_if_move_negative": 0.53
+      },
+      {
+        "label": "8-12bp",
+        "min_abs_bp": 8,
+        "max_abs_bp": 12,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.44,
+        "p_up_if_move_negative": 0.56
       }
     ]
   },
@@ -1721,105 +1449,13 @@
       "perp_gap_bp": 9.815673929702937
     },
     "model": {
-      "features": [
-        "gap_spot_bp",
-        "gap_perp_bp",
-        "spot_perp_spread_bp",
-        "delta_gap_spot_1u",
-        "delta_gap_perp_1u",
-        "delta_gap_spot_2u",
-        "delta_gap_perp_2u",
-        "spot_ret_1u_bp",
-        "perp_ret_1u_bp",
-        "chain_ret_1u_bp",
-        "spot_ret_2u_bp",
-        "perp_ret_2u_bp",
-        "chain_ret_2u_bp",
-        "gap_spot_z_12",
-        "gap_perp_z_12",
-        "spot_vol_6u",
-        "perp_vol_6u",
-        "chain_vol_6u",
-        "gap_sign_agree",
-        "delta_sign_agree",
-        "basis_pressure"
-      ],
-      "intercept": 0.00733455734031623,
-      "coef": [
-        0.040290520573064995,
-        0.04505843631280199,
-        -0.013050742057067233,
-        -0.008607802734395655,
-        -0.06790694360542521,
-        -0.12128727272433439,
-        0.14216969142783276,
-        -0.041531701031676,
-        -0.0489582003098636,
-        -0.04035658306556172,
-        -0.007389225948855082,
-        0.01420193479660398,
-        0.0038230843687323845,
-        0.17240326805636869,
-        -0.11141125013608387,
-        0.24625071899468334,
-        0.14790128652397996,
-        -0.35450523291032576,
-        0.0,
-        -0.008801042147979072,
-        0.013050742057076598
-      ],
-      "means": [
-        14.332932394321094,
-        9.815673929702937,
-        4.517258464618156,
-        0.0033955921388232747,
-        0.004419829339437102,
-        0.004381881319805719,
-        0.006574387446056575,
-        -0.2728826860497795,
-        -0.27185259682560026,
-        -0.27650130889122987,
-        -0.5392248344652959,
-        -0.5372373655534429,
-        -0.543851014343614,
-        0.01111111795145785,
-        0.0233218563410773,
-        10.413475331036985,
-        10.463562517419689,
-        10.258376244449984,
-        1.0,
-        0.39699074074074076,
-        -4.517258464618156
-      ],
-      "scales": [
-        2.1302477946625227,
-        2.181053024216853,
-        0.9536657866281685,
-        1.5783346737672337,
-        1.4490718394782713,
-        1.553774061120741,
-        1.4964290659794266,
-        12.51757938097731,
-        12.516722207802728,
-        12.343903603899575,
-        17.723477402745676,
-        17.725816985564357,
-        17.602919858059447,
-        0.9836158854419038,
-        1.0094522398841161,
-        6.991624821977491,
-        6.916103132356287,
-        6.864984329463538,
-        1.0,
-        0.9178226145427656,
-        0.9536657866281684
-      ]
+      "features": []
     },
     "notes": {
       "basis_story": "Chainlink settled products lean on spot/perp basis, basis change, and return/vol context rather than raw orderbook pressure.",
       "selection_metric": "Best calibrated fair-probability estimate on actual historical trade timestamps.",
       "deployment_profile": "production_final",
-      "starter_logic": "Production final: calibrated Chainlink fair-mid model everywhere, plus delayed basis and longer-horizon mean-reversion overlays where replay supported them.",
+      "starter_logic": "Model 3: fixed-window Chainlink logic. Use 2m lookback for 3m/5m/15m and 20m lookback for 1h, then apply smoothed MR ladders.",
       "calibration_kind": "isotonic",
       "calibration_summary": {
         "samples": 4747,
@@ -1844,8 +1480,9 @@
         "winner_test_logloss": 0.6757033359318814,
         "winner_test_auc": 0.5670127484831351
       },
-      "production_rationale": "Base fair-mid model plus a strong ETH 5m momentum overlay when gap-delta exceeds 3bp.",
-      "implementation_mode": "single_final_monitor"
+      "production_rationale": "Fixed-window architecture chosen for robustness and consistency across products, with smoothed MR ladders to reduce recent-window overfit.",
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_fixed_window"
     },
     "neutral_band": 0.0,
     "flip_signal": false,
@@ -1886,21 +1523,50 @@
       ]
     },
     "active_mode": "neutral",
-    "overlays": [
+    "overlays": [],
+    "engine": "chainlink_bucket",
+    "lookback_s": 120,
+    "signal_source": "chainlink",
+    "bucket_rules": [
       {
-        "type": "gated_directional_override",
-        "gate_metric": "delta_gap_spot_1u",
-        "signal_metric": "delta_gap_perp_1u",
-        "default_prob_up": 0.5,
-        "label": "eth5m_momentum",
-        "bands": [
-          {
-            "min_abs_gate_bp": 3.0,
-            "prob_up_if_signal_positive": 0.6,
-            "prob_up_if_signal_negative": 0.4,
-            "label": "eth5m_momentum_gate3"
-          }
-        ]
+        "label": "0-4bp",
+        "min_abs_bp": 0,
+        "max_abs_bp": 4,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.49,
+        "p_up_if_move_negative": 0.51
+      },
+      {
+        "label": "12-20bp",
+        "min_abs_bp": 12,
+        "max_abs_bp": 20,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.41,
+        "p_up_if_move_negative": 0.58
+      },
+      {
+        "label": "20+bp",
+        "min_abs_bp": 20,
+        "max_abs_bp": null,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.42,
+        "p_up_if_move_negative": 0.61
+      },
+      {
+        "label": "4-8bp",
+        "min_abs_bp": 4,
+        "max_abs_bp": 8,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.49,
+        "p_up_if_move_negative": 0.51
+      },
+      {
+        "label": "8-12bp",
+        "min_abs_bp": 8,
+        "max_abs_bp": 12,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.43,
+        "p_up_if_move_negative": 0.55
       }
     ]
   },
@@ -1919,105 +1585,13 @@
       "perp_gap_bp": 9.90106376578564
     },
     "model": {
-      "features": [
-        "gap_spot_bp",
-        "gap_perp_bp",
-        "spot_perp_spread_bp",
-        "delta_gap_spot_1u",
-        "delta_gap_perp_1u",
-        "delta_gap_spot_2u",
-        "delta_gap_perp_2u",
-        "spot_ret_1u_bp",
-        "perp_ret_1u_bp",
-        "chain_ret_1u_bp",
-        "spot_ret_2u_bp",
-        "perp_ret_2u_bp",
-        "chain_ret_2u_bp",
-        "gap_spot_z_12",
-        "gap_perp_z_12",
-        "spot_vol_6u",
-        "perp_vol_6u",
-        "chain_vol_6u",
-        "gap_sign_agree",
-        "delta_sign_agree",
-        "basis_pressure"
-      ],
-      "intercept": 0.014207382192505098,
-      "coef": [
-        0.0009518004524958983,
-        0.016912416735410968,
-        -0.037420683455079165,
-        -0.018227601389911124,
-        -0.05725541367498512,
-        0.1084204493491996,
-        -0.06750221954934289,
-        -0.038942028751350034,
-        -0.038290155596764616,
-        -0.03362662880660484,
-        0.016715129233540505,
-        -0.003528711366057257,
-        0.0026252950492499424,
-        0.3425158125180201,
-        -0.07210530888667466,
-        0.19579933070536676,
-        0.11451050907356373,
-        -0.34109500592430236,
-        0.0,
-        -0.049590602850578126,
-        0.03742068345508489
-      ],
-      "means": [
-        14.392889487818467,
-        9.90106376578564,
-        4.4918257220328295,
-        0.0027787130393450215,
-        0.005681476832943714,
-        0.012386562867801642,
-        0.0167934671834873,
-        -0.7645549583699025,
-        -0.7611648486368113,
-        -0.7670378529680919,
-        -1.504763563164442,
-        -1.5027592854432177,
-        -1.518910921346476,
-        0.018249622134198482,
-        0.051490457764513047,
-        17.954596505335406,
-        17.97064051640702,
-        17.903358813388056,
-        1.0,
-        0.4583333333333333,
-        -4.491825722032829
-      ],
-      "scales": [
-        2.141767202732392,
-        2.129693105565157,
-        0.9080465451127961,
-        1.7978895565963515,
-        1.5288811314155817,
-        1.8373693332868497,
-        1.6495453189599123,
-        21.224006838312395,
-        21.247897794903732,
-        21.1959284315044,
-        30.64791509203045,
-        30.625254282396984,
-        30.617829612552498,
-        0.9974055896222346,
-        1.0175675939720097,
-        11.276746640389645,
-        11.30202571296652,
-        11.320605231216671,
-        1.0,
-        0.8887803753208975,
-        0.9080465451127961
-      ]
+      "features": []
     },
     "notes": {
       "basis_story": "Chainlink settled products lean on spot/perp basis, basis change, and return/vol context rather than raw orderbook pressure.",
       "selection_metric": "Best calibrated fair-probability estimate on actual historical trade timestamps.",
       "deployment_profile": "production_final",
-      "starter_logic": "Production final: calibrated Chainlink fair-mid model everywhere, plus delayed basis and longer-horizon mean-reversion overlays where replay supported them.",
+      "starter_logic": "Model 3: fixed-window Chainlink logic. Use 2m lookback for 3m/5m/15m and 20m lookback for 1h, then apply smoothed MR ladders.",
       "calibration_kind": "isotonic",
       "calibration_summary": {
         "samples": 1435,
@@ -2042,8 +1616,9 @@
         "winner_test_logloss": 0.6645685124092994,
         "winner_test_auc": 0.5450067476383267
       },
-      "production_rationale": "Base fair-mid model plus an ETH 15m momentum overlay in strong gap-delta states.",
-      "implementation_mode": "single_final_monitor"
+      "production_rationale": "Fixed-window architecture chosen for robustness and consistency across products, with smoothed MR ladders to reduce recent-window overfit.",
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_fixed_window"
     },
     "neutral_band": 0.0,
     "flip_signal": true,
@@ -2068,21 +1643,50 @@
       ]
     },
     "active_mode": "neutral",
-    "overlays": [
+    "overlays": [],
+    "engine": "chainlink_bucket",
+    "lookback_s": 120,
+    "signal_source": "chainlink",
+    "bucket_rules": [
       {
-        "type": "gated_directional_override",
-        "gate_metric": "delta_gap_spot_1u",
-        "signal_metric": "chain_ret_1u_bp",
-        "default_prob_up": 0.5,
-        "label": "eth15m_momentum",
-        "bands": [
-          {
-            "min_abs_gate_bp": 3.0,
-            "prob_up_if_signal_positive": 0.58,
-            "prob_up_if_signal_negative": 0.42,
-            "label": "eth15m_momentum_gate3"
-          }
-        ]
+        "label": "0-4bp",
+        "min_abs_bp": 0,
+        "max_abs_bp": 4,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.49,
+        "p_up_if_move_negative": 0.51
+      },
+      {
+        "label": "12-20bp",
+        "min_abs_bp": 12,
+        "max_abs_bp": 20,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.3929,
+        "p_up_if_move_negative": 0.61
+      },
+      {
+        "label": "20+bp",
+        "min_abs_bp": 20,
+        "max_abs_bp": null,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.38,
+        "p_up_if_move_negative": 0.5818
+      },
+      {
+        "label": "4-8bp",
+        "min_abs_bp": 4,
+        "max_abs_bp": 8,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.47,
+        "p_up_if_move_negative": 0.5489
+      },
+      {
+        "label": "8-12bp",
+        "min_abs_bp": 8,
+        "max_abs_bp": 12,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.45,
+        "p_up_if_move_negative": 0.5789
       }
     ]
   },
@@ -2101,105 +1705,13 @@
       "perp_gap_bp": 10.162909926651869
     },
     "model": {
-      "features": [
-        "gap_spot_bp",
-        "gap_perp_bp",
-        "spot_perp_spread_bp",
-        "delta_gap_spot_1u",
-        "delta_gap_perp_1u",
-        "delta_gap_spot_2u",
-        "delta_gap_perp_2u",
-        "spot_ret_1u_bp",
-        "perp_ret_1u_bp",
-        "chain_ret_1u_bp",
-        "spot_ret_2u_bp",
-        "perp_ret_2u_bp",
-        "chain_ret_2u_bp",
-        "gap_spot_z_12",
-        "gap_perp_z_12",
-        "spot_vol_6u",
-        "perp_vol_6u",
-        "chain_vol_6u",
-        "gap_sign_agree",
-        "delta_sign_agree",
-        "basis_pressure"
-      ],
-      "intercept": 0.08962989054693171,
-      "coef": [
-        -0.0020797301335887144,
-        0.07247057608699885,
-        -0.17274822215964564,
-        -0.036801197121488674,
-        -0.09388537826358712,
-        0.6865667307812597,
-        -0.5746161732586438,
-        -0.07075543332591105,
-        -0.07023387709123853,
-        -0.0667570211262116,
-        0.03503607644633865,
-        -0.020702382056479635,
-        0.0010209953278343417,
-        0.05008939596753031,
-        0.35771143859611015,
-        -0.011128808582282438,
-        -0.055865686109992055,
-        -0.055134061739894005,
-        0.0,
-        -0.20120069524582804,
-        0.1727482221596435
-      ],
-      "means": [
-        14.713717756300573,
-        10.162909926651869,
-        4.550807829648706,
-        0.0427265566968137,
-        0.052629104006403665,
-        0.05359958321859783,
-        0.07315561780582396,
-        -2.9531163621665915,
-        -2.949271361556319,
-        -3.0008165886709883,
-        -5.717973040214434,
-        -5.690090883086243,
-        -5.762384533365648,
-        0.041652962179994535,
-        0.062359064498712646,
-        36.76031211839458,
-        36.668044988084894,
-        36.74436851511088,
-        1.0,
-        0.5694444444444444,
-        -4.550807829648706
-      ],
-      "scales": [
-        2.3673819125081565,
-        2.1954013615425927,
-        0.9495062517213428,
-        2.4599796790027857,
-        2.0880527943236027,
-        2.6033669969293585,
-        2.2155651669734198,
-        42.04770460119052,
-        41.92000783450718,
-        41.9021382307671,
-        58.704451985663816,
-        58.61565774892062,
-        58.52684889214413,
-        1.027595271021092,
-        0.9884995162836621,
-        22.49808875359607,
-        22.383350930982527,
-        22.17727438449118,
-        1.0,
-        0.8220298198309828,
-        0.9495062517213428
-      ]
+      "features": []
     },
     "notes": {
       "basis_story": "Chainlink settled products lean on spot/perp basis, basis change, and return/vol context rather than raw orderbook pressure.",
       "selection_metric": "Best calibrated fair-probability estimate on actual historical trade timestamps.",
       "deployment_profile": "production_final",
-      "starter_logic": "Production final: calibrated Chainlink fair-mid model everywhere, plus delayed basis and longer-horizon mean-reversion overlays where replay supported them.",
+      "starter_logic": "Model 3: fixed-window Chainlink logic. Use 2m lookback for 3m/5m/15m and 20m lookback for 1h, then apply smoothed MR ladders.",
       "calibration_kind": "identity",
       "calibration_summary": {
         "samples": 1096,
@@ -2224,8 +1736,9 @@
         "winner_test_logloss": 0.6953753443532527,
         "winner_test_auc": 0.5894248534018798
       },
-      "production_rationale": "Base fair-mid model plus a strong ETH 1h momentum overlay in large gap-delta states.",
-      "implementation_mode": "single_final_monitor"
+      "production_rationale": "Fixed-window architecture chosen for robustness and consistency across products, with smoothed MR ladders to reduce recent-window overfit.",
+      "implementation_mode": "single_final_monitor",
+      "model_variant": "chainlink_model3_fixed_window"
     },
     "neutral_band": 0.0,
     "flip_signal": false,
@@ -2234,21 +1747,50 @@
       "kind": "identity"
     },
     "active_mode": "neutral",
-    "overlays": [
+    "overlays": [],
+    "engine": "chainlink_bucket",
+    "lookback_s": 1200,
+    "signal_source": "chainlink",
+    "bucket_rules": [
       {
-        "type": "gated_directional_override",
-        "gate_metric": "delta_gap_spot_1u",
-        "signal_metric": "perp_ret_1u_bp",
-        "default_prob_up": 0.5,
-        "label": "eth1h_momentum",
-        "bands": [
-          {
-            "min_abs_gate_bp": 3.0,
-            "prob_up_if_signal_positive": 0.62,
-            "prob_up_if_signal_negative": 0.38,
-            "label": "eth1h_momentum_gate3"
-          }
-        ]
+        "label": "0-4bp",
+        "min_abs_bp": 0,
+        "max_abs_bp": 4,
+        "mode": "flat",
+        "p_up_if_move_positive": 0.5,
+        "p_up_if_move_negative": 0.5
+      },
+      {
+        "label": "12-20bp",
+        "min_abs_bp": 12,
+        "max_abs_bp": 20,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.4118,
+        "p_up_if_move_negative": 0.5946
+      },
+      {
+        "label": "20+bp",
+        "min_abs_bp": 20,
+        "max_abs_bp": null,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.43,
+        "p_up_if_move_negative": 0.6061
+      },
+      {
+        "label": "4-8bp",
+        "min_abs_bp": 4,
+        "max_abs_bp": 8,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.46,
+        "p_up_if_move_negative": 0.6
+      },
+      {
+        "label": "8-12bp",
+        "min_abs_bp": 8,
+        "max_abs_bp": 12,
+        "mode": "mean_reversion",
+        "p_up_if_move_positive": 0.39,
+        "p_up_if_move_negative": 0.62
       }
     ]
   }

@@ -39,16 +39,22 @@
     "favored_payout_floor": 65.0,
     "alpha": 1.0,
     "margin": 0.0,
-    "engine": "turbo_disabled",
-    "active_mode": "suppress",
+    "engine": "turbo_bucket",
+    "active_mode": "neutral",
+    "lookback_s": 30,
+    "base_payout_pct": 80.0,
     "model": {
-      "features": []
+      "features": [
+        "turbo_move_bp",
+        "turbo_abs_move_bp",
+        "platform_skew_pp"
+      ]
     },
     "notes": {
       "family": "turbo",
-      "source": "turbo_7d_backtest",
-      "production_rationale": "Weekend turbo model has this product turned off.",
-      "selection_metric": "Suppressed by policy for the current turbo weekend deployment.",
+      "source": "turbo_short_7d_replay",
+      "production_rationale": "7-day ETH turbo own-feed short-tenor replay. Uses a smoothed 30s own-feed move ladder with mild mean-reversion bias instead of leaving the product unavailable.",
+      "selection_metric": "Recovered from direct ETH turbo-feed replay after the earlier bundle left ETH 30s blank.",
       "implementation_mode": "turbo_family_monitor"
     },
     "neutral_band": 0.0,
@@ -57,6 +63,63 @@
       "kind": "identity",
       "flip_signal": false
     },
+    "bucket_rules": [
+      {
+        "label": "0-5",
+        "mode": "mean_reversion",
+        "min_abs_bp": 0.0,
+        "max_abs_bp": 5.0,
+        "danger_payout_pct": 65.0,
+        "safe_payout_pct": 96.0,
+        "p_up_if_move_positive": 0.495,
+        "p_up_if_move_negative": 0.495,
+        "chosen_win_rate_pct": 50.5
+      },
+      {
+        "label": "5-10",
+        "mode": "mean_reversion",
+        "min_abs_bp": 5.0,
+        "max_abs_bp": 10.0,
+        "danger_payout_pct": 65.0,
+        "safe_payout_pct": 96.0,
+        "p_up_if_move_positive": 0.48,
+        "p_up_if_move_negative": 0.49,
+        "chosen_win_rate_pct": 52.0
+      },
+      {
+        "label": "10-15",
+        "mode": "mean_reversion",
+        "min_abs_bp": 10.0,
+        "max_abs_bp": 15.0,
+        "danger_payout_pct": 65.0,
+        "safe_payout_pct": 96.0,
+        "p_up_if_move_positive": 0.472,
+        "p_up_if_move_negative": 0.485,
+        "chosen_win_rate_pct": 52.8
+      },
+      {
+        "label": "15-20",
+        "mode": "mean_reversion",
+        "min_abs_bp": 15.0,
+        "max_abs_bp": 20.0,
+        "danger_payout_pct": 65.0,
+        "safe_payout_pct": 96.0,
+        "p_up_if_move_positive": 0.445,
+        "p_up_if_move_negative": 0.512,
+        "chosen_win_rate_pct": 55.2
+      },
+      {
+        "label": "20+",
+        "mode": "mean_reversion",
+        "min_abs_bp": 20.0,
+        "max_abs_bp": null,
+        "danger_payout_pct": 65.0,
+        "safe_payout_pct": 96.0,
+        "p_up_if_move_positive": 0.465,
+        "p_up_if_move_negative": 0.545,
+        "chosen_win_rate_pct": 54.5
+      }
+    ],
     "overlays": []
   },
   "BTC/USDT::1m": {
@@ -99,16 +162,22 @@
     "favored_payout_floor": 65.0,
     "alpha": 1.0,
     "margin": 0.0,
-    "engine": "turbo_disabled",
-    "active_mode": "suppress",
+    "engine": "turbo_bucket",
+    "active_mode": "neutral",
+    "lookback_s": 10,
+    "base_payout_pct": 80.0,
     "model": {
-      "features": []
+      "features": [
+        "turbo_move_bp",
+        "turbo_abs_move_bp",
+        "platform_skew_pp"
+      ]
     },
     "notes": {
       "family": "turbo",
-      "source": "turbo_7d_backtest",
-      "production_rationale": "Weekend turbo model has this product turned off.",
-      "selection_metric": "Suppressed by policy for the current turbo weekend deployment.",
+      "source": "turbo_short_7d_replay",
+      "production_rationale": "7-day ETH turbo own-feed short-tenor replay. Uses a smoothed 10s own-feed move ladder with the clearest observed ETH 1m mean-reversion effect.",
+      "selection_metric": "Recovered from direct ETH turbo-feed replay after the earlier bundle left ETH 1m blank.",
       "implementation_mode": "turbo_family_monitor"
     },
     "neutral_band": 0.0,
@@ -117,6 +186,63 @@
       "kind": "identity",
       "flip_signal": false
     },
+    "bucket_rules": [
+      {
+        "label": "0-5",
+        "mode": "mean_reversion",
+        "min_abs_bp": 0.0,
+        "max_abs_bp": 5.0,
+        "danger_payout_pct": 65.0,
+        "safe_payout_pct": 96.0,
+        "p_up_if_move_positive": 0.47,
+        "p_up_if_move_negative": 0.51,
+        "chosen_win_rate_pct": 53.0
+      },
+      {
+        "label": "5-10",
+        "mode": "mean_reversion",
+        "min_abs_bp": 5.0,
+        "max_abs_bp": 10.0,
+        "danger_payout_pct": 65.0,
+        "safe_payout_pct": 96.0,
+        "p_up_if_move_positive": 0.475,
+        "p_up_if_move_negative": 0.535,
+        "chosen_win_rate_pct": 53.5
+      },
+      {
+        "label": "10-15",
+        "mode": "mean_reversion",
+        "min_abs_bp": 10.0,
+        "max_abs_bp": 15.0,
+        "danger_payout_pct": 65.0,
+        "safe_payout_pct": 96.0,
+        "p_up_if_move_positive": 0.44,
+        "p_up_if_move_negative": 0.535,
+        "chosen_win_rate_pct": 56.0
+      },
+      {
+        "label": "15-20",
+        "mode": "mean_reversion",
+        "min_abs_bp": 15.0,
+        "max_abs_bp": 20.0,
+        "danger_payout_pct": 65.0,
+        "safe_payout_pct": 96.0,
+        "p_up_if_move_positive": 0.445,
+        "p_up_if_move_negative": 0.5,
+        "chosen_win_rate_pct": 55.5
+      },
+      {
+        "label": "20+",
+        "mode": "mean_reversion",
+        "min_abs_bp": 20.0,
+        "max_abs_bp": null,
+        "danger_payout_pct": 65.0,
+        "safe_payout_pct": 96.0,
+        "p_up_if_move_positive": 0.47,
+        "p_up_if_move_negative": 0.53,
+        "chosen_win_rate_pct": 53.0
+      }
+    ],
     "overlays": []
   },
   "BTC/USDT::3m": {

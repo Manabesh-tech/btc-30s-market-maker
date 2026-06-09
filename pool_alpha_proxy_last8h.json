@@ -1,0 +1,239 @@
+{
+  "assumed_edge_pct": 10.0,
+  "floor_payout": 65.0,
+  "max_prob": 0.5454545454545454,
+  "max_disp": 0.045454545454545414,
+  "rows": [
+    {
+      "pool_name": "Manabesh",
+      "pair": "BTC/USDT",
+      "product": "1m",
+      "trades": 128,
+      "avg_p_up": 0.49922456575682383,
+      "avg_abs_disp": 0.007571561503013065,
+      "p95_abs_disp": 0.016129032258064502,
+      "alpha_proxy_mean": 0.1665743530662876,
+      "alpha_proxy_p95": 0.3548387096774194
+    },
+    {
+      "pool_name": "Manabesh",
+      "pair": "BTC/USDT",
+      "product": "30s",
+      "trades": 401,
+      "avg_p_up": 0.4997104898158716,
+      "avg_abs_disp": 0.010427228631717364,
+      "p95_abs_disp": 0.016129032258064502,
+      "alpha_proxy_mean": 0.22939902989778221,
+      "alpha_proxy_p95": 0.3548387096774194
+    },
+    {
+      "pool_name": "Manabesh",
+      "pair": "BTC/USDT",
+      "product": "3m",
+      "trades": 48,
+      "avg_p_up": 0.5007865118752215,
+      "avg_abs_disp": 0.005092018196856881,
+      "p95_abs_disp": 0.016129032258064502,
+      "alpha_proxy_mean": 0.11202440033085148,
+      "alpha_proxy_p95": 0.3548387096774194
+    },
+    {
+      "pool_name": "Manabesh",
+      "pair": "BTC/USDT",
+      "product": "5m",
+      "trades": 26,
+      "avg_p_up": 0.502283696452431,
+      "avg_abs_disp": 0.0035516592588552744,
+      "p95_abs_disp": 0.016129032258064502,
+      "alpha_proxy_mean": 0.0781365036948161,
+      "alpha_proxy_p95": 0.3548387096774194
+    },
+    {
+      "pool_name": "Manabesh",
+      "pair": "ETH/USDT",
+      "product": "30s",
+      "trades": 158,
+      "avg_p_up": 0.4997307714743403,
+      "avg_abs_disp": 0.008590633539592255,
+      "p95_abs_disp": 0.016129032258064502,
+      "alpha_proxy_mean": 0.18899393787102978,
+      "alpha_proxy_p95": 0.3548387096774194
+    },
+    {
+      "pool_name": "Manabesh",
+      "pair": "ETH/USDT",
+      "product": "5m",
+      "trades": 25,
+      "avg_p_up": 0.4997802197802198,
+      "avg_abs_disp": 0.0010989010989010883,
+      "p95_abs_disp": 0.005494505494505464,
+      "alpha_proxy_mean": 0.024175824175823965,
+      "alpha_proxy_p95": 0.12087912087912031
+    },
+    {
+      "pool_name": "Nayt",
+      "pair": "BTC/USDT",
+      "product": "1m",
+      "trades": 224,
+      "avg_p_up": 0.5,
+      "avg_abs_disp": 0.0,
+      "p95_abs_disp": 0.0,
+      "alpha_proxy_mean": 0.0,
+      "alpha_proxy_p95": 0.0
+    },
+    {
+      "pool_name": "Nayt",
+      "pair": "BTC/USDT",
+      "product": "30s",
+      "trades": 1363,
+      "avg_p_up": 0.5,
+      "avg_abs_disp": 0.0,
+      "p95_abs_disp": 0.0,
+      "alpha_proxy_mean": 0.0,
+      "alpha_proxy_p95": 0.0
+    },
+    {
+      "pool_name": "Nayt",
+      "pair": "ETH/USDT",
+      "product": "1m",
+      "trades": 83,
+      "avg_p_up": 0.5,
+      "avg_abs_disp": 0.0,
+      "p95_abs_disp": 0.0,
+      "alpha_proxy_mean": 0.0,
+      "alpha_proxy_p95": 0.0
+    },
+    {
+      "pool_name": "Nayt",
+      "pair": "ETH/USDT",
+      "product": "30s",
+      "trades": 519,
+      "avg_p_up": 0.5,
+      "avg_abs_disp": 0.0,
+      "p95_abs_disp": 0.0,
+      "alpha_proxy_mean": 0.0,
+      "alpha_proxy_p95": 0.0
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "BTC/USDT",
+      "product": "15m",
+      "trades": 95,
+      "avg_p_up": 0.5037923031317125,
+      "avg_abs_disp": 0.014102728046264347,
+      "p95_abs_disp": 0.033009718761170925,
+      "alpha_proxy_mean": 0.3102600170178159,
+      "alpha_proxy_p95": 0.726213812745761
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "BTC/USDT",
+      "product": "1h",
+      "trades": 39,
+      "avg_p_up": 0.48744892874286605,
+      "avg_abs_disp": 0.013794294338412302,
+      "p95_abs_disp": 0.024816304862224647,
+      "alpha_proxy_mean": 0.3034744754450709,
+      "alpha_proxy_p95": 0.5459587069689427
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "BTC/USDT",
+      "product": "1m",
+      "trades": 340,
+      "avg_p_up": 0.5007339654935999,
+      "avg_abs_disp": 0.0121879386484071,
+      "p95_abs_disp": 0.018716577540107027,
+      "alpha_proxy_mean": 0.2681346502649564,
+      "alpha_proxy_p95": 0.411764705882355
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "BTC/USDT",
+      "product": "30s",
+      "trades": 2006,
+      "avg_p_up": 0.5000323767056565,
+      "avg_abs_disp": 0.006082855595149857,
+      "p95_abs_disp": 0.006849315068493178,
+      "alpha_proxy_mean": 0.133822823093297,
+      "alpha_proxy_p95": 0.15068493150685006
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "BTC/USDT",
+      "product": "3m",
+      "trades": 233,
+      "avg_p_up": 0.499871046273689,
+      "avg_abs_disp": 0.02067161863655928,
+      "p95_abs_disp": 0.038461538461538436,
+      "alpha_proxy_mean": 0.45477561000430455,
+      "alpha_proxy_p95": 0.8461538461538464
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "BTC/USDT",
+      "product": "5m",
+      "trades": 155,
+      "avg_p_up": 0.5018167290798119,
+      "avg_abs_disp": 0.018950632211858335,
+      "p95_abs_disp": 0.038461538461538436,
+      "alpha_proxy_mean": 0.41691390866088374,
+      "alpha_proxy_p95": 0.8461538461538464
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "ETH/USDT",
+      "product": "1h",
+      "trades": 42,
+      "avg_p_up": 0.4880299915580725,
+      "avg_abs_disp": 0.012550334744697546,
+      "p95_abs_disp": 0.023723794763991998,
+      "alpha_proxy_mean": 0.27610736438334627,
+      "alpha_proxy_p95": 0.5219234848078244
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "ETH/USDT",
+      "product": "1m",
+      "trades": 56,
+      "avg_p_up": 0.5019260841290564,
+      "avg_abs_disp": 0.012780330851905624,
+      "p95_abs_disp": 0.018716577540107027,
+      "alpha_proxy_mean": 0.281167278741924,
+      "alpha_proxy_p95": 0.411764705882355
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "ETH/USDT",
+      "product": "30s",
+      "trades": 521,
+      "avg_p_up": 0.5001265770173398,
+      "avg_abs_disp": 0.005848413186868116,
+      "p95_abs_disp": 0.006849315068493178,
+      "alpha_proxy_mean": 0.12866509011109867,
+      "alpha_proxy_p95": 0.15068493150685006
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "ETH/USDT",
+      "product": "3m",
+      "trades": 68,
+      "avg_p_up": 0.4976841793540958,
+      "avg_abs_disp": 0.019422143897146665,
+      "p95_abs_disp": 0.038461538461538436,
+      "alpha_proxy_mean": 0.427287165737227,
+      "alpha_proxy_p95": 0.8461538461538464
+    },
+    {
+      "pool_name": "SIG",
+      "pair": "ETH/USDT",
+      "product": "5m",
+      "trades": 79,
+      "avg_p_up": 0.49430380261542595,
+      "avg_abs_disp": 0.02091854321091537,
+      "p95_abs_disp": 0.038461538461538436,
+      "alpha_proxy_mean": 0.46020795064013853,
+      "alpha_proxy_p95": 0.8461538461538464
+    }
+  ]
+}
