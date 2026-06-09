@@ -11,17 +11,18 @@ const __dirname = path.dirname(__filename);
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT || 8787);
 const execFileAsync = promisify(execFile);
-const LEGACY_TURBO_SHORT_MODEL_PATH = path.join(ROOT, "live_mid_model_30s_best_trade_model.json");
+const LEGACY_TURBO_SHORT_MODEL_PATH = path.join(ROOT, "dev_handoff_20260606_final", "$repo", "live_mid_model_30s_best_trade_model.json");
 const PYTHON_CANDIDATES = [
   process.env.PYTHON_BIN,
   process.env.PYTHON,
   process.env.CONDA_PYTHON_EXE,
-  "python3",
+  process.env.USERPROFILE ? path.join(process.env.USERPROFILE, "anaconda3", "python.exe") : null,
+  process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "Python", "Python312", "python.exe") : null,
   "python",
   "py",
 ].filter(Boolean);
-const API_KEY = process.env.CHAINLINK_API_KEY || "1cc69e78-85fb-4c1f-b36c-6b55e69c1865";
-const USER_SECRET = process.env.CHAINLINK_USER_SECRET || "Wz5NRTA1GbSQw04oE7s8Ug1go18pse01yddl7VNSOLxyr9ltkMw3K3HFDLLI9g5lH3x823tyqvzTHUI3BG07hy7MFVbsR9uq6MK9327X9e2rVEN5iCZ3OsQ77ARtHB51";
+const API_KEY = "1cc69e78-85fb-4c1f-b36c-6b55e69c1865";
+const USER_SECRET = "Wz5NRTA1GbSQw04oE7s8Ug1go18pse01yddl7VNSOLxyr9ltkMw3K3HFDLLI9g5lH3x823tyqvzTHUI3BG07hy7MFVbsR9uq6MK9327X9e2rVEN5iCZ3OsQ77ARtHB51";
 const BASE_URL = "https://api.dataengine.chain.link";
 const FEEDS = {
   "BTC/USDT": "0x00039d9e45394f473ab1f050a1b963e6b05351e52d71e507509ada0c95ed75b8",
@@ -33,12 +34,12 @@ const SYMBOLS = {
 };
 
 const TURBO_DB_CONFIG = {
-  host: process.env.TURBO_DB_HOST || "aws-jp-tk-surf-pg-public.cluster-csteuf9lw8dv.ap-northeast-1.rds.amazonaws.com",
-  port: Number(process.env.TURBO_DB_PORT || 5432),
-  dbname: process.env.TURBO_DB_NAME || "replication_report",
-  user: process.env.TURBO_DB_USER || "manabesh_kaj",
-  password: process.env.TURBO_DB_PASSWORD || "dPL084;KF1spv,g",
-  sslmode: process.env.TURBO_DB_SSLMODE || "require",
+  host: "aws-jp-tk-surf-pg-public.cluster-csteuf9lw8dv.ap-northeast-1.rds.amazonaws.com",
+  port: 5432,
+  dbname: "replication_report",
+  user: "manabesh_kaj",
+  password: "dPL084;KF1spv,g",
+  sslmode: "require",
 };
 
 const MIME_TYPES = {
@@ -58,6 +59,11 @@ const MIME_TYPES = {
 const LEGACY_TURBO_SHORT_MODEL = JSON.parse(fs.readFileSync(LEGACY_TURBO_SHORT_MODEL_PATH, "utf8"));
 const LEGACY_TURBO_SHORT_COEF = LEGACY_TURBO_SHORT_MODEL.coefficients || {};
 const LEGACY_TURBO_SHORT_HISTORY = [];
+const SERVER_HISTORY_LIMIT = 9000;
+const SERVER_MARKET_STATE = {
+  "BTC/USDT": { pair: "BTC/USDT", chainlink: null, turbo: null, spot: null, perp: null, lastUpdateTs: null, history: [] },
+  "ETH/USDT": { pair: "ETH/USDT", chainlink: null, turbo: null, spot: null, perp: null, lastUpdateTs: null, history: [] },
+};
 const LEGACY_TURBO_SHORT_PRODUCT_STATE = {
   "30s": { displayProbability: 0.5, quoteWindowStartTs: null },
   "1m": { displayProbability: 0.5, quoteWindowStartTs: null },
@@ -84,14 +90,14 @@ const LEGACY_TURBO_SHORT_BASE = {
 
 function resolvePythonCommand() {
   for (const candidate of PYTHON_CANDIDATES) {
-    if (candidate === "python3" || candidate === "python" || candidate === "py") {
+    if (candidate === "python" || candidate === "py") {
       return candidate;
     }
     if (fs.existsSync(candidate)) {
       return candidate;
     }
   }
-  return "python3";
+  return "python";
 }
 
 const PYTHON_CMD = resolvePythonCommand();
@@ -106,6 +112,40 @@ function send(res, statusCode, body, contentType = "text/plain; charset=utf-8") 
 
 function sendJson(res, statusCode, payload) {
   send(res, statusCode, JSON.stringify(payload), "application/json; charset=utf-8");
+}
+
+function cloneServerMarketState(pair) {
+  const state = SERVER_MARKET_STATE[pair];
+  if (!state) return null;
+  return {
+    pair: state.pair,
+    chainlink: state.chainlink,
+    turbo: state.turbo,
+    spot: state.spot,
+    perp: state.perp,
+    lastUpdateTs: state.lastUpdateTs,
+    history: state.history.slice(),
+  };
+}
+
+function maybeRecordServerSnapshot(pair) {
+  const market = SERVER_MARKET_STATE[pair];
+  if (!market) return;
+  if (!Number.isFinite(market.spot) || !Number.isFinite(market.perp)) return;
+  if (!Number.isFinite(market.chainlink) && !Number.isFinite(market.turbo)) return;
+  const ts = Number.isFinite(market.lastUpdateTs) ? market.lastUpdateTs : Date.now();
+  const previous = market.history.length ? market.history[market.history.length - 1] : null;
+  if (previous && ts <= previous.ts) return;
+  market.history.push({
+    ts,
+    chainlink: market.chainlink,
+    turbo: market.turbo,
+    spot: market.spot,
+    perp: market.perp,
+  });
+  if (market.history.length > SERVER_HISTORY_LIMIT) {
+    market.history.splice(0, market.history.length - SERVER_HISTORY_LIMIT);
+  }
 }
 
 function decodeChainlinkMid(fullReport) {
@@ -141,6 +181,25 @@ async function fetchChainlinkLatest(pair) {
     price: decodeChainlinkMid(payload.report.fullReport),
     observationTs: Number(payload.report.observationsTimestamp) * 1000,
   };
+}
+
+async function getChainlinkLatest(pair, { preferCache = true } = {}) {
+  const cached = SERVER_MARKET_STATE[pair];
+  if (preferCache && cached && Number.isFinite(cached.chainlink) && Number.isFinite(cached.lastUpdateTs)) {
+    return {
+      pair,
+      price: cached.chainlink,
+      observationTs: cached.lastUpdateTs,
+      cached: true,
+    };
+  }
+  const payload = await fetchChainlinkLatest(pair);
+  const market = SERVER_MARKET_STATE[pair];
+  if (market) {
+    market.chainlink = Number(payload.price);
+    market.lastUpdateTs = Math.max(Number(market.lastUpdateTs || 0), Number(payload.observationTs || Date.now()));
+  }
+  return payload;
 }
 
 async function fetchBinanceLatest(pair) {
@@ -180,6 +239,34 @@ async function fetchBinanceLatest(pair) {
   };
 }
 
+async function getBinanceLatest(pair, { preferCache = true } = {}) {
+  const cached = SERVER_MARKET_STATE[pair];
+  if (
+    preferCache
+    && cached
+    && Number.isFinite(cached.spot)
+    && Number.isFinite(cached.perp)
+    && Number.isFinite(cached.lastUpdateTs)
+  ) {
+    return {
+      pair,
+      spot: cached.spot,
+      perp: cached.perp,
+      perpFallback: false,
+      ts: cached.lastUpdateTs,
+      cached: true,
+    };
+  }
+  const payload = await fetchBinanceLatest(pair);
+  const market = SERVER_MARKET_STATE[pair];
+  if (market) {
+    market.spot = Number(payload.spot);
+    market.perp = Number(payload.perp);
+    market.lastUpdateTs = Math.max(Number(market.lastUpdateTs || 0), Number(payload.ts || Date.now()));
+  }
+  return payload;
+}
+
 async function fetchTurboLatest(pair) {
   if (!SYMBOLS[pair]) {
     throw new Error(`Unknown pair: ${pair}`);
@@ -211,6 +298,25 @@ with psycopg2.connect(**db) as conn:
     : ["-c", script];
   const { stdout } = await execFileAsync(PYTHON_CMD, pythonArgs, { cwd: ROOT, timeout: 8000 });
   return JSON.parse(stdout.trim());
+}
+
+async function getTurboLatest(pair, { preferCache = true } = {}) {
+  const cached = SERVER_MARKET_STATE[pair];
+  if (preferCache && cached && Number.isFinite(cached.turbo) && Number.isFinite(cached.lastUpdateTs)) {
+    return {
+      pair,
+      price: cached.turbo,
+      ts: cached.lastUpdateTs,
+      cached: true,
+    };
+  }
+  const payload = await fetchTurboLatest(pair);
+  const market = SERVER_MARKET_STATE[pair];
+  if (market) {
+    market.turbo = Number(payload.price);
+    market.lastUpdateTs = Math.max(Number(market.lastUpdateTs || 0), Number(payload.ts || Date.now()));
+  }
+  return payload;
 }
 
 function sumLevels(levels, depth, mapper) {
@@ -403,6 +509,46 @@ async function fetchLegacyTurboShortState(product) {
   };
 }
 
+let marketSamplingInFlight = false;
+
+async function sampleServerMarketPair(pair) {
+  const market = SERVER_MARKET_STATE[pair];
+  if (!market) return;
+  const [chainlinkResult, binanceResult, turboResult] = await Promise.allSettled([
+    fetchChainlinkLatest(pair),
+    fetchBinanceLatest(pair),
+    fetchTurboLatest(pair),
+  ]);
+  let latestTs = Number(market.lastUpdateTs || 0);
+  if (chainlinkResult.status === "fulfilled") {
+    market.chainlink = Number(chainlinkResult.value.price);
+    latestTs = Math.max(latestTs, Number(chainlinkResult.value.observationTs || Date.now()));
+  }
+  if (binanceResult.status === "fulfilled") {
+    market.spot = Number(binanceResult.value.spot);
+    market.perp = Number(binanceResult.value.perp);
+    latestTs = Math.max(latestTs, Number(binanceResult.value.ts || Date.now()));
+  }
+  if (turboResult.status === "fulfilled") {
+    market.turbo = Number(turboResult.value.price);
+    latestTs = Math.max(latestTs, Number(turboResult.value.ts || Date.now()));
+  }
+  if (Number.isFinite(latestTs) && latestTs > 0) {
+    market.lastUpdateTs = latestTs;
+    maybeRecordServerSnapshot(pair);
+  }
+}
+
+async function sampleServerMarkets() {
+  if (marketSamplingInFlight) return;
+  marketSamplingInFlight = true;
+  try {
+    await Promise.all(Object.keys(SERVER_MARKET_STATE).map((pair) => sampleServerMarketPair(pair)));
+  } finally {
+    marketSamplingInFlight = false;
+  }
+}
+
 function safePathFromUrl(urlPath) {
   const pathname = decodeURIComponent(new URL(urlPath, "http://localhost").pathname);
   const relative = pathname === "/" ? "/index.html" : pathname;
@@ -416,23 +562,33 @@ const server = http.createServer((req, res) => {
     const requestUrl = new URL(req.url || "/", "http://localhost");
     if (requestUrl.pathname === "/api/chainlink/latest") {
       const pair = requestUrl.searchParams.get("pair") || "";
-      fetchChainlinkLatest(pair)
+      getChainlinkLatest(pair)
         .then((payload) => sendJson(res, 200, payload))
         .catch((error) => sendJson(res, 500, { error: error.message }));
       return;
     }
     if (requestUrl.pathname === "/api/binance/latest") {
       const pair = requestUrl.searchParams.get("pair") || "";
-      fetchBinanceLatest(pair)
+      getBinanceLatest(pair)
         .then((payload) => sendJson(res, 200, payload))
         .catch((error) => sendJson(res, 500, { error: error.message }));
       return;
     }
     if (requestUrl.pathname === "/api/turbo/latest") {
       const pair = requestUrl.searchParams.get("pair") || "";
-      fetchTurboLatest(pair)
+      getTurboLatest(pair)
         .then((payload) => sendJson(res, 200, payload))
         .catch((error) => sendJson(res, 500, { error: error.message }));
+      return;
+    }
+    if (requestUrl.pathname === "/api/market/history") {
+      const pair = requestUrl.searchParams.get("pair") || "";
+      const payload = cloneServerMarketState(pair);
+      if (!payload) {
+        sendJson(res, 404, { error: `Unknown pair: ${pair}` });
+        return;
+      }
+      sendJson(res, 200, payload);
       return;
     }
     if (requestUrl.pathname === "/api/turbo/legacy-short") {
@@ -477,5 +633,14 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Hosted product suite listening on http://0.0.0.0:${PORT} using ${PYTHON_CMD}`);
+  console.log(`3m dashboard listening on http://0.0.0.0:${PORT} using ${PYTHON_CMD}`);
 });
+
+sampleServerMarkets().catch((error) => {
+  console.error("Initial market sampler failed", error);
+});
+setInterval(() => {
+  sampleServerMarkets().catch((error) => {
+    console.error("Market sampler failed", error);
+  });
+}, 1000);

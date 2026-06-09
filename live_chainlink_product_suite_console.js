@@ -6,9 +6,9 @@ const DEFAULT_FAMILY = params.get("family") || "chainlink";
 const DEFAULT_MODEL = params.get("model") || "model1";
 const DEFAULT_BLEND_MODEL = params.get("blend_model") || "none";
 const DEFAULT_BLEND_PCT = Number(params.get("blend") || 0);
-const ALPHA_PROXY_URL = "./pool_alpha_proxy_last8h.json";
+const ALPHA_PROXY_URL = "./outputs/pool_alpha_proxy_last8h.json";
 const PLATFORM_CONFIG_URL = "https://apis.turboflow.xyz/public/pm/config?version=2";
-const TURBO_CONFIG_URL = "./turbo_product_suite_final_models.json";
+const TURBO_CONFIG_URL = "./outputs/turbo_product_suite_final_models.json";
 const TURBO_LEGACY_SHORT_EDGE_HINT = 4.0;
 const CL_POLL_MS = 1000;
 const MARKET_POLL_MS = 1000;
@@ -208,6 +208,14 @@ async function fetchTurboLegacyShort(product) {
   const response = await fetch(`./api/turbo/legacy-short?product=${encodeURIComponent(product)}`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Turbo legacy short ${response.status}`);
+  }
+  return response.json();
+}
+
+async function fetchServerHistory(pairName) {
+  const response = await fetch(`./api/market/history?pair=${encodeURIComponent(pairName)}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Market history ${response.status}`);
   }
   return response.json();
 }
@@ -523,12 +531,20 @@ function pickStickyBucket(absMove, bucketRules, memoryKey) {
 
 function configUrlForModel(modelKey) {
   if (modelKey === "model2") {
-    return "./chainlink_model2_smoothed_mr_models.json";
+    return "./outputs/chainlink_model2_smoothed_mr_models.json";
   }
   if (modelKey === "model3") {
-    return "./chainlink_model3_fixed_window_models.json";
+    return "./outputs/chainlink_model3_fixed_window_models.json";
   }
-  return "./chainlink_product_suite_final_models.json";
+  return CONFIG_MODE === "raw"
+    ? "./outputs/chainlink_product_suite_best_models.json"
+    : CONFIG_MODE === "v2"
+      ? "./outputs/chainlink_product_suite_v2_models.json"
+      : CONFIG_MODE === "mid"
+        ? "./outputs/chainlink_product_suite_mid_models.json"
+        : CONFIG_MODE === "prod"
+          ? "./outputs/chainlink_product_suite_prod_models.json"
+          : "./outputs/chainlink_product_suite_final_models.json";
 }
 
 function warmupState(config, market) {
@@ -1201,6 +1217,38 @@ async function pollTurboLegacyShort() {
   render();
 }
 
+async function preloadServerHistories() {
+  await Promise.all(
+    Object.keys(state.market).map(async (pair) => {
+      try {
+        const payload = await fetchServerHistory(pair);
+        const market = state.market[pair];
+        if (!market || !payload) return;
+        market.chainlink = Number.isFinite(Number(payload.chainlink)) ? Number(payload.chainlink) : market.chainlink;
+        market.turbo = Number.isFinite(Number(payload.turbo)) ? Number(payload.turbo) : market.turbo;
+        market.spot = Number.isFinite(Number(payload.spot)) ? Number(payload.spot) : market.spot;
+        market.perp = Number.isFinite(Number(payload.perp)) ? Number(payload.perp) : market.perp;
+        market.lastUpdateTs = Number.isFinite(Number(payload.lastUpdateTs)) ? Number(payload.lastUpdateTs) : market.lastUpdateTs;
+        if (Array.isArray(payload.history) && payload.history.length) {
+          market.history = payload.history
+            .map((row) => ({
+              ts: Number(row.ts),
+              chainlink: Number.isFinite(Number(row.chainlink)) ? Number(row.chainlink) : null,
+              turbo: Number.isFinite(Number(row.turbo)) ? Number(row.turbo) : null,
+              spot: Number.isFinite(Number(row.spot)) ? Number(row.spot) : null,
+              perp: Number.isFinite(Number(row.perp)) ? Number(row.perp) : null,
+            }))
+            .filter((row) => Number.isFinite(row.ts))
+            .slice(-HISTORY_LIMIT);
+        }
+      } catch (error) {
+        console.error(`History preload failed for ${pair}`, error);
+      }
+    }),
+  );
+  render();
+}
+
 async function pollBinance() {
   const pairs = Object.keys(PAIR_META);
   await Promise.all(
@@ -1779,6 +1827,7 @@ async function init() {
   syncBlendControls();
   await loadConfigs();
   await loadAlphaProxies();
+  await preloadServerHistories();
   await fetchPlatformQuotes();
   await pollChainlink();
   await pollTurbo();
