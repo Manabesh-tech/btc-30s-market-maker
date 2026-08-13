@@ -1,0 +1,14 @@
+{
+  "modelId": "btc30_independent_selective_reservation_v1",
+  "pricingMode": "side_reservation",
+  "baseEdgePct": 5,
+  "competitionStepPp": 1,
+  "competitionSides": "state_aware_adaptive",
+  "moderateReservePct": 1,
+  "defensiveReservePct": 4,
+  "unknownReservePct": 4,
+  "twoWayMinimum": null,
+  "flowAware": false,
+  "drawdownReserve": false,
+  "deploymentMode": "shadow"
+}
